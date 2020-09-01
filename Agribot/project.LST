@@ -1,0 +1,3404 @@
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 1   
+
+
+ARM COMPILER V2.32a, COMPILATION OF MODULE project
+OBJECT MODULE PLACED IN project.OBJ
+COMPILER INVOKED BY: C:\Keil\ARM\BIN\CA.exe project.c THUMB BROWSE DEBUG TABS(4) 
+
+stmt  level    source
+
+    1          #include <lpc214x.h>         //21007BB4B15F         18008D991A16
+    2          #include <stdio.h>
+    3          #include <string.h>
+    4          
+    5          #include "lcd.h"
+    6          #include "serial.h"
+    7          //#include "gsm.h"
+    8          #include "gpio.h"
+    9          
+   10          #define ON  '1'//0x31
+   11          #define OFF '0' //0x30
+   12          
+   13          #define  dt1    P0_3
+   14          #define  dt2    P0_4
+   15          #define  dt3    P0_5
+   16          #define  dt4    P0_6
+   17          
+   18          
+   19          #define  m1a    P1_24
+   20          #define  m1b    P1_25
+   21          #define  m2a    P1_26
+   22          #define  m2b    P1_27
+   23          
+   24          
+   25          #define  m3a    P0_20
+   26          #define  m3b    P0_21
+   27          
+   28          #define  m4a    P0_22
+   29          #define  m4b    P0_23
+   30          
+   31          #define  relay  P0_10
+   32          
+   33          
+   34          unsigned int memsx=0,memsy=0;
+   35          void serial0_RxISR(void) __irq; 
+   36          
+   37          unsigned long int as1()
+   38          {
+   39   1       AD0CR&=0XFFFFFF00;
+   40   1       AD0CR|=0X01000002;
+   41   1       delay(500);
+   42   1        while(!(AD0DR1&0X80000000));
+   43   1       return ((AD0DR1 >> 6) & 0x03FF);
+   44   1      }
+   45          unsigned long int as2()
+   46          {
+   47   1       AD0CR&=0XFFFFFF00;
+   48   1       AD0CR|=0X01000004;
+   49   1       //delay(500);
+   50   1       while(!(AD0DR2&0X80000000));
+   51   1       return((AD0DR2 >> 6) & 0x03FF);
+   52   1      }
+   53          unsigned long int as3()
+   54          {
+   55   1       AD0CR&=0XFFFFFF00;
+   56   1       AD0CR|=0X01000008;
+   57   1       //delay(500);
+   58   1       while(!(AD0DR3&0X80000000));
+   59   1       return((AD0DR3 >> 6) & 0x03FF);
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 2   
+
+   60   1      }
+   61          
+   62          
+   63          void pin()
+   64          {
+   65   1       PINSEL0=0X00050005;//SELECTING PIN OPERATION
+   66   1       PINSEL1=0X15000000;
+   67   1       PINSEL2=0X00000000;
+   68   1       IODIR0=0xffffffff;
+   69   1      //IODIR0=0X00000000|sensor1|sensor2;// as output    and 2 pins as input
+   70   1       IODIR0 &= ~(dt1|dt2|dt3|dt4);
+   71   1       IODIR1=0XFFFFFFFF;//PORT1 AS OUTPUT
+   72   1       IOCLR1=0XFFFFFFFF;
+   73   1       AD0CR=0X00210600;// ADC CONTROL REGISTER
+   74   1      //IOPIN0|=0X0000001C;
+   75   1       //IOSET0=sensor1|sensor2;
+   76   1      }
+   77          /*char inp0(char _bit)
+   78          {
+   79           unsigned long c; 
+   80           c = 1<<_bit; // Calculate digit to configuration for input port
+   81           IODIR0 &= ~c; // Set input port from parameter _bit
+   82           return((IOPIN0 & c)>>_bit); // Read and return data bit
+   83          }*/
+   84          
+   85          int inp0(int pinNumber)
+   86          {
+   87   1        // Read the current state of all pins in GPIO block 0
+   88   1        int pinBlockState = IOPIN0;
+   89   1      
+   90   1        // Read the value of 'pinNumber'
+   91   1        int pinState = (pinBlockState & (/*1 <<*/ pinNumber)) ? 1 : 0;
+   92   1      
+   93   1        // Return the value of pinState
+   94   1        return pinState;
+   95   1      }
+   96          void InitSerial0Int(unsigned isrPtr)
+   97          {
+   98   1        U0IER = 0x01;
+   99   1        VICVectCntl0  = 0x00000026;                       //select a priority slot for a given interrupt  
+  100   1        VICVectAddr0  = (unsigned long)isrPtr;        //pass the address of the IRQ into the VIC slot 
+  101   1        VICIntEnable  |= 0x00000040;                      //enable interrupt2
+  102   1      }
+  103          
+  104          
+  105          
+  106          unsigned char chkok()
+  107          {
+  108   1        unsigned char rt;
+  109   1       
+  110   1       do{
+  111   2          rt = receive_0();
+  112   2          if(rt == 'E')
+  113   2            {
+  114   3               rt='E';
+  115   3               break;
+  116   3            }
+  117   2         }while(rt != 'K');
+  118   1      
+  119   1         return rt;
+  120   1      }
+  121                /*
+  122          void gprs()
+  123          {
+  124             unsigned char rt;   
+  125             do{
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 3   
+
+  126                delay(800);
+  127                string_0("AT\r\n");
+  128                 rt = chkok();
+  129               }while(rt != 'K');clcd(1);stringlcd(0x80,"AT");
+  130                   delay(600);
+  131          
+  132              /*
+  133              do{
+  134                 delay(800);
+  135                 string_0("AT+CSQ\r\n");
+  136                   rt = chkok();
+  137                }while(rt != 'K');clcd(1);stringlcd(0x80,"AT+CSQ");
+  138                   delay(400);  */
+  139          
+  140           /*
+  141              do{
+  142                  delay(600);
+  143                  string_0("AT+CSTT=\"AIRTELGPRS.COM\",\",\"\r\n");   //rcomnet
+  144           //  tx("AT+CSTT=\"RCOMNET\",\",\"\r\n");
+  145                  rt = chkok();
+  146                }while(rt != 'K');clcd(1);stringlcd(0x80,"Airtelgprs.com");  delay(600);
+  147          
+  148          
+  149               do{
+  150                  delay(600);
+  151                  string_0("AT+CGATT=1\r\n");
+  152                   rt = chkok();
+  153                 }while(rt != 'K');clcd(1);stringlcd(0x80,"AT+CGATT=1");delay(650);    
+  154          
+  155          
+  156               
+  157               do{
+  158                  delay(600);
+  159                  string_0("AT+CIICR\r\n");
+  160                   rt = chkok();
+  161                 }while(rt != 'K');clcd(1);stringlcd(0x80,"AT+CIICR=1");delay(650);
+  162                 
+  163                     
+  164          //delay(150);
+  165                 string_0("AT+CIFSR\r\n");
+  166                 delay(1500);
+  167                 delay(1000);
+  168                 clcd(1);  
+  169                 stringlcd(0x80,"AT+CIFSR*");
+  170          }
+  171          
+  172          
+  173          void gprsstop()
+  174           {
+  175            unsigned char rx;
+  176            string_0("AT+CIPCLOSE\r\n");
+  177                   do{
+  178                       rx=receive_0();
+  179                     }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPCLOSE");
+  180                     delay(600);
+  181            string_0("AT+CIPSHUT\r\n");
+  182                   do{
+  183                       rx=receive_0();
+  184                     }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPSHUT");
+  185           }
+  186          
+  187          void gprsstart()
+  188           {
+  189           unsigned char rx;
+  190          
+  191             // do
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 4   
+
+  192              //{
+  193          lp:  delay(600);
+  194               string_0("AT+CIPSTART=\"TCP\",\"www.gprsserver.in\",\"80\"\r\n");  
+  195                do{
+  196                       rx=receive_0();
+  197                     }while(rx != 'K');
+  198                     
+  199                      do{
+  200                         rx=receive_0();
+  201                          if(rx == 'F')
+  202                             {
+  203                               gprsstop();goto lp;
+  204                             }
+  205                        }while(rx != 'K');       
+  206          
+  207               delay(600);
+  208          
+  209                      string_0("AT+CIPSEND\r\n");
+  210                      do{
+  211                         rx=receive_0();
+  212                        }while(rx != '>');
+  213           }
+  214            */
+  215          
+  216            
+  217          void okcheck()
+  218          {
+  219   1       unsigned char rr;
+  220   1       do{
+  221   2           rr = receive_0();
+  222   2         }while(rr != 'K');
+  223   1      }
+  224          
+  225          void gprs()
+  226          {
+  227   1      //   unsigned char rt;  
+  228   1      
+  229   1      
+  230   1            string_0("AT\r\n");
+  231   1             okcheck(); clcd(1); stringlcd(0x80,"AT");
+  232   1           
+  233   1               delay(400);
+  234   1      
+  235   1          /*
+  236   1          do{
+  237   1             delay(800);
+  238   1             string_0("AT+CSQ\r\n");
+  239   1               rt = chkok();
+  240   1            }while(rt != 'K');clcd(1);stringlcd(0x80,"AT+CSQ");
+  241   1               delay(400);  */
+  242   1      
+  243   1              string_0("AT+CSTT=\"AIRTELGPRS.COM\",\",\"\r\n");   //rcomnet
+  244   1              okcheck(); clcd(1);  stringlcd(0x80,"airtelgprs.com");
+  245   1       //  tx("AT+CSTT=\"RCOMNET\",\",\"\r\n");
+  246   1              
+  247   1              string_0("AT+CGATT=1\r\n");
+  248   1              okcheck(); clcd(1);  stringlcd(0x80,"AT+CGATT=1");
+  249   1              delay(650);  
+  250   1      
+  251   1      
+  252   1              string_0("AT+CIICR\r\n");
+  253   1              okcheck();clcd(1);   stringlcd(0x80,"AT+CIICR");
+  254   1                
+  255   1                delay(500);
+  256   1                 
+  257   1      //delay(150);
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 5   
+
+  258   1             string_0("AT+CIFSR\r\n");
+  259   1             delay(1500);
+  260   1             delay(1000);
+  261   1             clcd(1);  
+  262   1             stringlcd(0x80,"AT+CIFSR*");
+  263   1      }
+  264          
+  265          
+  266          void gprsstop()
+  267           {
+  268   1        unsigned char rx;
+  269   1        string_0("AT+CIPCLOSE\r\n");
+  270   1               do{
+  271   2                   rx=receive_0();
+  272   2                 }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPCLOSE");
+  273   1                 delay(600);
+  274   1        string_0("AT+CIPSHUT\r\n");
+  275   1               do{
+  276   2                   rx=receive_0();
+  277   2                 }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPSHUT");
+  278   1       }
+  279          
+  280          void gprsstart()
+  281           {
+  282   1       unsigned char rx;
+  283   1      
+  284   1         // do
+  285   1          //{
+  286   1      lp:  delay(600);
+  287   1           string_0("AT+CIPSTART=\"TCP\",\"www.gprsserver.in\",\"80\"\r\n");  
+  288   1            do{
+  289   2                   rx=receive_0();
+  290   2                 }while(rx != 'K');
+  291   1                 
+  292   1                  do{
+  293   2                     rx=receive_0();
+  294   2                      if(rx == 'F')
+  295   2                         {
+  296   3                           gprsstop();goto lp;
+  297   3                         }
+  298   2                    }while(rx != 'K');       
+  299   1      
+  300   1           delay(600);
+  301   1      
+  302   1                  string_0("AT+CIPSEND\r\n");
+  303   1                  do{
+  304   2                     rx=receive_0();
+  305   2                    }while(rx != '>');
+  306   1       }
+  307          
+  308          
+  309          
+  310          
+  311           
+  312          void gprs_vts_send(unsigned char *lat,unsigned char *lon,unsigned char *di1,unsigned char *di2,unsigned i
+             -nt ai1,unsigned int ai2,unsigned char *dev_name)
+  313          {
+  314   1       unsigned char tbuf[10];
+  315   1       unsigned char buf[4]={0x0d,0x0a,0x1a,0x00};
+  316   1       
+  317   1       string_0("GET /portvts.php?");
+  318   1      
+  319   1        
+  320   1       string_0("a=");  string_0(lat);
+  321   1       string_0("&b="); string_0(lon);
+  322   1      
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 6   
+
+  323   1       string_0("&c="); string_0(dev_name);
+  324   1       string_0("&d="); string_0("vts");
+  325   1       
+  326   1      
+  327   1       string_0("&e="); string_0(di1);
+  328   1        
+  329   1       string_0("&f="); string_0(di2);
+  330   1        
+  331   1      
+  332   1        sprintf(tbuf,"%u",ai1);
+  333   1          string_0("&g="); string_0(tbuf);
+  334   1      
+  335   1        sprintf(tbuf,"%u",ai2);
+  336   1          string_0("&h="); string_0(tbuf);
+  337   1      
+  338   1          string_0("&i="); string_0("- HTTP/1.1\r\n");
+  339   1      
+  340   1         string_0("Host: www.gprsserver.in\r\n");
+  341   1         string_0(buf);
+  342   1      //  tx1(0x1A);
+  343   1      }  
+  344          
+  345          void gprs_logger_send(unsigned char *s1,unsigned int si1,unsigned char *s2,unsigned int si2,unsigned char
+             - *s3,unsigned int si3,unsigned char *s4,unsigned int si4,unsigned char *s5,unsigned int si5,unsigned char *dev_name)
+  346          {
+  347   1        unsigned char tbuf[10];
+  348   1        unsigned char buf[4]={0x0d,0x0a,0x1a,0x00}; 
+  349   1       
+  350   1       string_0("GET /portlogger.php?");
+  351   1      
+  352   1       string_0("a=");string_0(s1);
+  353   1       sprintf(tbuf,"%u",si1);
+  354   1       string_0("&b=");string_0(tbuf);
+  355   1      
+  356   1       string_0("&c=");string_0(s2);
+  357   1       sprintf(tbuf,"%u",si2);
+  358   1       string_0("&d=");string_0(tbuf);
+  359   1      
+  360   1       string_0("&e=");string_0(s3);
+  361   1       sprintf(tbuf,"%u",si3);
+  362   1       string_0("&f=");string_0(tbuf);
+  363   1      
+  364   1       string_0("&g=");string_0(s4);
+  365   1       sprintf(tbuf,"%u",si4);
+  366   1       string_0("&h=");string_0(tbuf);
+  367   1      
+  368   1       string_0("&i=");string_0(s5);
+  369   1       sprintf(tbuf,"%u",si5);
+  370   1       string_0("&j=");string_0(tbuf);
+  371   1      
+  372   1      
+  373   1       string_0("&k=");string_0(dev_name);
+  374   1       string_0("&l=");string_0("logger");
+  375   1      
+  376   1       string_0(" HTTP/1.1 \r\n");
+  377   1      
+  378   1       string_0("Host: www.gprsserver.in\r\n");
+  379   1       string_0(buf);
+  380   1      
+  381   1      }
+  382          
+  383           
+  384          
+  385          
+  386           
+  387          unsigned char count=0,gps_location[26];
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 7   
+
+  388          void gps()
+  389          {
+  390   1          while(receive_1()!='C');
+  391   1              for(count=0;count<14;count++)
+  392   1              {
+  393   2              receive_1();
+  394   2              }
+  395   1              for(count=0;count<24;count++)
+  396   1              {
+  397   2              gps_location[count]=receive_1();
+  398   2              }
+  399   1      }
+  400          
+  401          
+  402          void lcdbasic()
+  403          {
+  404   1           clcd(1);
+  405   1          stringlcd(0x80,"HB:");//0x83,4,5
+  406   1          stringlcd(0x88,"T:"); //0x8A,9,a
+  407   1          stringlcd(0xc0,"M:"); //0xc2,3,4
+  408   1          stringlcd(0xc6,"L:"); //0xc8,9,a  
+  409   1          stringlcd(0xcb,"H:"); //0xcd,e,f
+  410   1      
+  411   1      }
+  412          
+  413          
+  414          
+  415          unsigned char mob1[11];//="9030059841\0";
+  416          unsigned char mob2[15]="7730867385\0";
+  417          unsigned int card=0,set1=0,set2=0,set3=0,hb=0,cnt=0,ht=0,loop=0;
+  418          unsigned char rfid_t[15],rfid_0[13]="140071C70FAD\0",rfid_1[13]="140071DCA61F\0",rfid_2[13]="840081160E1D
+             -\0",rfid_3[13]="FE006E2F5BE4\0";
+  419          unsigned char msg1[10],msg2[10];
+  420          
+  421          
+  422          void main()        //gsm modem is connected to serial0 and system is connected to serial1
+  423          {
+  424   1       unsigned char rec='X',rec1='x',p;
+  425   1       unsigned long int cnt=0,hc=0,ht=0;
+  426   1       unsigned int temp=0,hb;
+  427   1       for(p=0;p<14;p++){rfid_t[p]=0;}
+  428   1       pin();
+  429   1      
+  430   1                    IOCLR1=m1a;IOCLR1=m1b;
+  431   1                    IOCLR1=m2a;IOCLR1=m2b;
+  432   1      
+  433   1                    IOCLR0=m3a;IOCLR0=m3b;
+  434   1                    IOCLR0=m4a;IOCLR0=m4b;
+  435   1      
+  436   1                    IOCLR0=relay;
+  437   1      
+  438   1          ser_init_0(0x61,0x00);
+  439   1          ser_init_1(0x61,0x00); //serial initilization 
+  440   1      
+  441   1          initlcd();
+  442   1      
+  443   1          stringlcd(0x80,"Agriculture Robot"); //initial message
+  444   1          
+  445   1      
+  446   1          delay(1000); delay(1000);delay(1000);
+  447   1        //  InitSerial0Int((unsigned int)serial0_RxISR);
+  448   1         
+  449   1                           clcd(1);
+  450   1       while(1)
+  451   1       {
+  452   2         if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 8   
+
+  453   2           {
+  454   3            IOSET1=m1a;IOCLR1=m1b;
+  455   3            IOSET1=m2a;IOCLR1=m2b;  stringlcd(0x80,"F");
+  456   3           }
+  457   2         if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+  458   2           {
+  459   3            IOCLR1=m1a;IOSET1=m1b;
+  460   3            IOCLR1=m2a;IOSET1=m2b;  stringlcd(0x80,"B");
+  461   3           } 
+  462   2         if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+  463   2           {
+  464   3            IOSET1=m1a;IOCLR1=m1b;
+  465   3            IOCLR1=m2a;IOSET1=m2b;  stringlcd(0x80,"L");
+  466   3           } 
+  467   2         if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+  468   2           {
+  469   3            IOCLR1=m1a;IOSET1=m1b;
+  470   3            IOSET1=m2a;IOCLR1=m2b; stringlcd(0x80,"R");
+  471   3           } 
+  472   2         if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+  473   2           {
+  474   3            IOCLR1=m1a;IOCLR1=m1b;
+  475   3            IOCLR1=m2a;IOCLR1=m2b; stringlcd(0x80,"S");
+  476   3           }
+  477   2           
+  478   2           
+  479   2         if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+  480   2           {
+  481   3            IOCLR0=m3a;IOSET0=m3b;  stringlcd(0x80,"1");
+  482   3           }    
+  483   2         if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+  484   2           {
+  485   3            IOSET0=m3a;IOCLR0=m3b; stringlcd(0x80,"2");
+  486   3           }
+  487   2         if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+  488   2           {
+  489   3            IOCLR0=m3a;IOCLR0=m3b; stringlcd(0x80,"3");
+  490   3           }                    
+  491   2      
+  492   2      
+  493   2         
+  494   2         if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+  495   2           {
+  496   3            IOCLR0=m4a;IOSET0=m4b; stringlcd(0x80,"4");
+  497   3           }    
+  498   2         if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+  499   2           {
+  500   3            IOSET0=m4a;IOCLR0=m4b; stringlcd(0x80,"5");
+  501   3           }
+  502   2         if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+  503   2           {
+  504   3            IOCLR0=m4a;IOCLR0=m4b; stringlcd(0x80,"6");
+  505   3           }                    
+  506   2      
+  507   2      
+  508   2         
+  509   2         if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 1) 
+  510   2           {
+  511   3            IOSET0=relay;         stringlcd(0x80,"7");
+  512   3           }
+  513   2         if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 1) 
+  514   2           {
+  515   3            IOCLR0=relay;        stringlcd(0x80,"8");
+  516   3           }                    
+  517   2       }//end of while
+  518   1      
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 9   
+
+  519   1      
+  520   1       }
+*** WARNING C47 IN LINE 426 OF PROJECT.C: 'hb': unreferenced local variable
+  521           
+  522           /* 
+  523           void serial0_RxISR(void) __irq 
+  524          {
+  525            unsigned char ch;
+  526            for(ch=0;ch<12;ch++){rfid_t[ch]=receive_0();}
+  527            IOCLR0=relay;
+  528            if(strcmp(rfid_t,rfid_0)==0){card = 1;set3=1;}
+  529            if(strcmp(rfid_t,rfid_1)==0){card = 2;set3=1;}
+  530            if(strcmp(rfid_t,rfid_2)==0){card = 3;set3=1;}
+  531            
+  532            VICVectAddr   = 0x00000000;                       //Dummy write to signal end of interrupt
+  533          }  */
+  534                                                                                            
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 10  
+
+ASSEMBLY LISTING OF GENERATED OBJECT CODE
+
+
+
+*** EXTERNALS:
+ EXTERN CODE16 (sprintf?T)
+ EXTERN CODE16 (?C?UDIV?T)
+ EXTERN CODE16 (?C?SDIV?T)
+ EXTERN NUMBER (__startup)
+
+
+
+*** PUBLICS:
+ PUBLIC         delay?T
+ PUBLIC         clcd?T
+ PUBLIC         dlcd?T
+ PUBLIC         initlcd?T
+ PUBLIC         stringlcd?T
+ PUBLIC         conv?T
+ PUBLIC         ser_init_1?T
+ PUBLIC         send_1?T
+ PUBLIC         receive_1?T
+ PUBLIC         string_1?T
+ PUBLIC         ser_init_0?T
+ PUBLIC         send_0?T
+ PUBLIC         receive_0?T
+ PUBLIC         string_0?T
+ PUBLIC         conv_serial_0?T
+ PUBLIC         conv_serial_1?T
+ PUBLIC         as1?T
+ PUBLIC         as2?T
+ PUBLIC         as3?T
+ PUBLIC         pin?T
+ PUBLIC         inp0?T
+ PUBLIC         InitSerial0Int?T
+ PUBLIC         chkok?T
+ PUBLIC         okcheck?T
+ PUBLIC         gprs?T
+ PUBLIC         gprsstop?T
+ PUBLIC         gprsstart?T
+ PUBLIC         gprs_vts_send?T
+ PUBLIC         gprs_logger_send?T
+ PUBLIC         gps?T
+ PUBLIC         lcdbasic?T
+ PUBLIC         main
+ PUBLIC         memsx
+ PUBLIC         memsy
+ PUBLIC         count
+ PUBLIC         gps_location
+ PUBLIC         mob1
+ PUBLIC         mob2
+ PUBLIC         card
+ PUBLIC         set1
+ PUBLIC         set2
+ PUBLIC         set3
+ PUBLIC         hb
+ PUBLIC         cnt
+ PUBLIC         ht
+ PUBLIC         loop
+ PUBLIC         rfid_t
+ PUBLIC         rfid_0
+ PUBLIC         rfid_1
+ PUBLIC         rfid_2
+ PUBLIC         rfid_3
+ PUBLIC         msg1
+ PUBLIC         msg2
+
+
+
+*** DATA SEGMENT '?CON?project':
+ 00000000          ??S_60:
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 11  
+
+ 00000000            DB          '8',0x00
+ 00000002          ??S_59:
+ 00000002            DB          '7',0x00
+ 00000004          ??S_58:
+ 00000004            DB          '6',0x00
+ 00000006          ??S_57:
+ 00000006            DB          '5',0x00
+ 00000008          ??S_56:
+ 00000008            DB          '4',0x00
+ 0000000A          ??S_55:
+ 0000000A            DB          '3',0x00
+ 0000000C          ??S_54:
+ 0000000C            DB          '2',0x00
+ 0000000E          ??S_53:
+ 0000000E            DB          '1',0x00
+ 00000010          ??S_52:
+ 00000010            DB          'S',0x00
+ 00000012          ??S_51:
+ 00000012            DB          'R',0x00
+ 00000014          ??S_50:
+ 00000014            DB          'L',0x00
+ 00000016          ??S_49:
+ 00000016            DB          'B',0x00
+ 00000018          ??S_48:
+ 00000018            DB          'F',0x00
+ 0000001A          ??S_47:
+ 0000001A            DB          'Agriculture Robot',0x00
+ 0000002C          ??S_41:
+ 0000002C            DB          'H:',0x00
+ 0000002F          ??S_40:
+ 0000002F            DB          'L:',0x00
+ 00000032          ??S_39:
+ 00000032            DB          'M:',0x00
+ 00000035          ??S_38:
+ 00000035            DB          'T:',0x00
+ 00000038          ??S_37:
+ 00000038            DB          'HB:',0x00
+ 0000003C          ??S_36:
+ 0000003C            DB          ' HTTP/1.1 ',0x0D,0x0A,0x00
+ 00000049          ??S_35:
+ 00000049            DB          'logger',0x00
+ 00000050          ??S_34:
+ 00000050            DB          '&l=',0x00
+ 00000054          ??S_33:
+ 00000054            DB          '&k=',0x00
+ 00000058          ??S_32:
+ 00000058            DB          '&j=',0x00
+ 0000005C          ??S_31:
+ 0000005C            DB          'GET /portlogger.php?',0x00
+ 00000071          ??S_30:
+ 00000071            DB          'Host: www.gprsserver.in',0x0D,0x0A,0x00
+ 0000008B          ??S_29:
+ 0000008B            DB          '- HTTP/1.1',0x0D,0x0A,0x00
+ 00000098          ??S_28:
+ 00000098            DB          '&i=',0x00
+ 0000009C          ??S_27:
+ 0000009C            DB          '&h=',0x00
+ 000000A0          ??S_26:
+ 000000A0            DB          '&g=',0x00
+ 000000A4          ??S_25:
+ 000000A4            DB          '%u',0x00
+ 000000A7          ??S_24:
+ 000000A7            DB          '&f=',0x00
+ 000000AB          ??S_23:
+ 000000AB            DB          '&e=',0x00
+ 000000AF          ??S_22:
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 12  
+
+ 000000AF            DB          'vts',0x00
+ 000000B3          ??S_21:
+ 000000B3            DB          '&d=',0x00
+ 000000B7          ??S_20:
+ 000000B7            DB          '&c=',0x00
+ 000000BB          ??S_19:
+ 000000BB            DB          '&b=',0x00
+ 000000BF          ??S_18:
+ 000000BF            DB          'a=',0x00
+ 000000C2          ??S_17:
+ 000000C2            DB          'GET /portvts.php?',0x00
+ 000000D4          ??S_16:
+ 000000D4            DB          'AT+CIPSEND',0x0D,0x0A,0x00
+ 000000E1          ??S_15:
+ 000000E1            DB          'AT+CIPSTART="TCP","www.gprsserver.in"'
+ 00000107            DB          '"80"',0x0D,0x0A,0x00
+ 0000010E          ??S_14:
+ 0000010E            DB          'AT+CIPSHUT',0x00
+ 00000119          ??S_13:
+ 00000119            DB          'AT+CIPSHUT',0x0D,0x0A,0x00
+ 00000126          ??S_12:
+ 00000126            DB          'AT+CIPCLOSE',0x00
+ 00000132          ??S_11:
+ 00000132            DB          'AT+CIPCLOSE',0x0D,0x0A,0x00
+ 00000140          ??S_10:
+ 00000140            DB          'AT+CIFSR*',0x00
+ 0000014A          ??S_9:
+ 0000014A            DB          'AT+CIFSR',0x0D,0x0A,0x00
+ 00000155          ??S_8:
+ 00000155            DB          'AT+CIICR',0x00
+ 0000015E          ??S_7:
+ 0000015E            DB          'AT+CIICR',0x0D,0x0A,0x00
+ 00000169          ??S_6:
+ 00000169            DB          'AT+CGATT=1',0x00
+ 00000174          ??S_5:
+ 00000174            DB          'AT+CGATT=1',0x0D,0x0A,0x00
+ 00000181          ??S_4:
+ 00000181            DB          'airtelgprs.com',0x00
+ 00000190          ??S_3:
+ 00000190            DB          'AT+CSTT="AIRTELGPRS.COM",","',0x0D,0x0A
+ 000001AE            DB          0x00
+ 000001AF          ??S_2:
+ 000001AF            DB          'AT',0x00
+ 000001B2          ??S_1:
+ 000001B2            DB          'AT',0x0D,0x0A,0x00
+ 000001B7            ALIGN       4
+ 000001B8          ?tpl?0001:
+ 000001B8           BEGIN_INIT
+ 000001B8  0D        DB          0xD
+ 000001B9  0A        DB          0xA
+ 000001BA  1A        DB          0x1A
+ 000001BB  00        DB          0x0
+ 000001BC           END_INIT
+ 000001BC          ?tpl?0002:
+ 000001BC           BEGIN_INIT
+ 000001BC  0D        DB          0xD
+ 000001BD  0A        DB          0xA
+ 000001BE  1A        DB          0x1A
+ 000001BF  00        DB          0x0
+ 000001C0           END_INIT
+
+*** DATA SEGMENT '?DT0?project':
+ 00000000          memsx:
+ 00000000           BEGIN_INIT
+ 00000000  00000000  DD          0x0
+ 00000004           END_INIT
+ 00000004          memsy:
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 13  
+
+ 00000004           BEGIN_INIT
+ 00000004  00000000  DD          0x0
+ 00000008           END_INIT
+ 00000008          card:
+ 00000008           BEGIN_INIT
+ 00000008  00000000  DD          0x0
+ 0000000C           END_INIT
+ 0000000C          set1:
+ 0000000C           BEGIN_INIT
+ 0000000C  00000000  DD          0x0
+ 00000010           END_INIT
+ 00000010          set2:
+ 00000010           BEGIN_INIT
+ 00000010  00000000  DD          0x0
+ 00000014           END_INIT
+ 00000014          set3:
+ 00000014           BEGIN_INIT
+ 00000014  00000000  DD          0x0
+ 00000018           END_INIT
+ 00000018          hb:
+ 00000018           BEGIN_INIT
+ 00000018  00000000  DD          0x0
+ 0000001C           END_INIT
+ 0000001C          cnt:
+ 0000001C           BEGIN_INIT
+ 0000001C  00000000  DD          0x0
+ 00000020           END_INIT
+ 00000020          ht:
+ 00000020           BEGIN_INIT
+ 00000020  00000000  DD          0x0
+ 00000024           END_INIT
+ 00000024          loop:
+ 00000024           BEGIN_INIT
+ 00000024  00000000  DD          0x0
+ 00000028           END_INIT
+ 00000028          count:
+ 00000028           BEGIN_INIT
+ 00000028  00        DB          0x0
+ 00000029           END_INIT
+ 00000029          gps_location:
+ 00000029            DS          26
+ 00000043          mob1:
+ 00000043            DS          11
+ 0000004E          mob2:
+ 0000004E           BEGIN_INIT
+ 0000004E            DB          '7730867385',0x00,0x00
+ 0000005A            SPACE       3
+ 0000005D           END_INIT
+ 0000005D          rfid_t:
+ 0000005D            DS          15
+ 0000006C          rfid_0:
+ 0000006C           BEGIN_INIT
+ 0000006C            DB          '140071C70FAD',0x00
+ 00000079           END_INIT
+ 00000079          rfid_1:
+ 00000079           BEGIN_INIT
+ 00000079            DB          '140071DCA61F',0x00
+ 00000086           END_INIT
+ 00000086          rfid_2:
+ 00000086           BEGIN_INIT
+ 00000086            DB          '840081160E1D',0x00
+ 00000093           END_INIT
+ 00000093          rfid_3:
+ 00000093           BEGIN_INIT
+ 00000093            DB          'FE006E2F5BE4',0x00
+ 000000A0           END_INIT
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 14  
+
+ 000000A0          msg1:
+ 000000A0            DS          10
+ 000000AA          msg2:
+ 000000AA            DS          10
+
+
+
+*** CODE SEGMENT '?PR?delay?T?project':
+   23: void delay( unsigned int value )
+ 00000000  B410      PUSH        {R4}
+ 00000002  ---- Variable 'value' assigned to Register 'R0' ----
+   24: {
+ 00000002            ; SCOPE-START
+   26:  for(ui_temp1=0;ui_temp1<value;ui_temp1++)
+ 00000002  2100      MOV         R1,#0x0
+ 00000004  ---- Variable 'ui_temp1' assigned to Register 'R1' ----
+ 00000004  E006      B           L_3  ; T=0x00000014
+   27:  for(ui_temp2=0;ui_temp2<5000;ui_temp2++);
+ 00000006          L_10:
+ 00000006  2200      MOV         R2,#0x0
+ 00000008  ---- Variable 'ui_temp2' assigned to Register 'R2' ----
+ 00000008          L_6:
+ 00000008  3201      ADD         R2,#0x1
+ 0000000A  1C13      MOV         R3,R2 ; ui_temp2
+ 0000000C  4800      LDR         R4,=0x1388
+ 0000000E  42A3      CMP         R3,R4 ; ui_temp2
+ 00000010  D3FA      BCC         L_6  ; T=0x00000008
+ 00000012  3101      ADD         R1,#0x1
+ 00000014          L_3:
+ 00000014  1C03      MOV         R3,R0 ; value
+ 00000016  1C0A      MOV         R2,R1 ; ui_temp1
+ 00000018  429A      CMP         R2,R3 ; ui_temp1
+ 0000001A  D3F4      BCC         L_10  ; T=0x00000006
+ 0000001C            ; SCOPE-END
+   28: }
+ 0000001C  BC10      POP         {R4}
+ 0000001E  4770      BX          R14
+ 00000020          ENDP ; 'delay?T'
+
+
+*** CODE SEGMENT '?PR?clcd?T?project':
+   30: void clcd(unsigned char val)
+ 00000000  B410      PUSH        {R4}
+ 00000002  1C03      MOV         R3,R0 ; val
+ 00000004  ---- Variable 'val' assigned to Register 'R3' ----
+   31: {
+ 00000004            ; SCOPE-START
+   35:  IOCLR1 = LCD_RS ;                  // RS = 0 
+ 00000004  4800      LDR         R1,=0x10000
+ 00000006  4800      LDR         R0,=0xE002801C
+ 00000008  6001      STR         R1,[R0,#0x0]
+   37:  lcd_ch=((val>>4)&0x0F);            // Strobe 4-Bit High-Nibble to LCD
+ 0000000A  1C18      MOV         R0,R3 ; val
+ 0000000C  0602      LSL         R2,R0,#0x18 ; val
+ 0000000E  0E12      LSR         R2,R2,#0x18
+ 00000010  0912      LSR         R2,R2,#0x4
+ 00000012  200F      MOV         R0,#0xF
+ 00000014  4002      AND         R2,R0
+ 00000016  ---- Variable 'lcd_ch' assigned to Register 'R2' ----
+   39:  IOCLR1 = (LCD_D7|LCD_D6|LCD_D5|LCD_D4);     // Reset 4-Bit Pin Data
+ 00000016  4800      LDR         R1,=0x3C0000
+ 00000018  4800      LDR         R0,=0xE002801C
+ 0000001A  6001      STR         R1,[R0,#0x0]
+   40:  IOSET1 = (lcd_ch<<18);                     // Data Send to Respective Pins    
+ 0000001C  1C11      MOV         R1,R2 ; lcd_ch
+ 0000001E  0489      LSL         R1,R1,#0x12
+ 00000020  4800      LDR         R0,=0xE0028014
+ 00000022  6001      STR         R1,[R0,#0x0]
+   41:  IOSET1 = LCD_EN ;                  // EN = 1 (Enable)
+ 00000024  4800      LDR         R1,=0x20000
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 15  
+
+ 00000026  4800      LDR         R0,=0xE0028014
+ 00000028  6001      STR         R1,[R0,#0x0]
+   42:  for (lcd_i=0;lcd_i<10000;lcd_i++); //delay
+ 0000002A  2100      MOV         R1,#0x0
+ 0000002C  ---- Variable 'lcd_i' assigned to Register 'R1' ----
+ 0000002C          L_11:
+ 0000002C  3101      ADD         R1,#0x1
+ 0000002E  1C08      MOV         R0,R1 ; lcd_i
+ 00000030  4800      LDR         R4,=0x2710
+ 00000032  42A0      CMP         R0,R4 ; lcd_i
+ 00000034  D3FA      BCC         L_11  ; T=0x0000002C
+   43:  IOCLR1 = LCD_EN ;                  // EN = 0 (Disable) 
+ 00000036  4800      LDR         R1,=0x20000
+ 00000038  4800      LDR         R0,=0xE002801C
+ 0000003A  6001      STR         R1,[R0,#0x0]
+   45:  lcd_ch=(val&0x0F);                     // Strobe 4-Bit Low-Nibble to LCD
+ 0000003C  1C18      MOV         R0,R3 ; val
+ 0000003E  0602      LSL         R2,R0,#0x18 ; val
+ 00000040  0E12      LSR         R2,R2,#0x18
+ 00000042  200F      MOV         R0,#0xF
+ 00000044  4002      AND         R2,R0
+   47:  IOCLR1 = (LCD_D7|LCD_D6|LCD_D5|LCD_D4); // Reset 4-Bit Pin Data
+ 00000046  4800      LDR         R1,=0x3C0000
+ 00000048  4800      LDR         R0,=0xE002801C
+ 0000004A  6001      STR         R1,[R0,#0x0]
+   48:  IOSET1 = (lcd_ch<<18);                 // EN,0,RW,RS:DDDD:0000:0000:0000:0000:0000:0000   
+ 0000004C  1C11      MOV         R1,R2 ; lcd_ch
+ 0000004E  0489      LSL         R1,R1,#0x12
+ 00000050  4800      LDR         R0,=0xE0028014
+ 00000052  6001      STR         R1,[R0,#0x0]
+   49:  IOSET1 = LCD_EN ;                  // EN = 1 (Enable)
+ 00000054  4800      LDR         R1,=0x20000
+ 00000056  4800      LDR         R0,=0xE0028014
+ 00000058  6001      STR         R1,[R0,#0x0]
+   50:  for (lcd_i=0;lcd_i<10000;lcd_i++); //delay
+ 0000005A  2100      MOV         R1,#0x0
+ 0000005C          L_16:
+ 0000005C  3101      ADD         R1,#0x1
+ 0000005E  1C08      MOV         R0,R1 ; lcd_i
+ 00000060  4800      LDR         R2,=0x2710
+ 00000062  4290      CMP         R0,R2 ; lcd_i
+ 00000064  D3FA      BCC         L_16  ; T=0x0000005C
+   51:  IOCLR1 = LCD_EN ;                  // EN = 0 (Disable) 
+ 00000066  4800      LDR         R1,=0x20000
+ 00000068  4800      LDR         R0,=0xE002801C
+ 0000006A  6001      STR         R1,[R0,#0x0]
+   53:  for (lcd_i=0;lcd_i<10000;lcd_i++);  //delay
+ 0000006C  2100      MOV         R1,#0x0
+ 0000006E          L_21:
+ 0000006E  3101      ADD         R1,#0x1
+ 00000070  1C08      MOV         R0,R1 ; lcd_i
+ 00000072  4800      LDR         R2,=0x2710
+ 00000074  4290      CMP         R0,R2 ; lcd_i
+ 00000076  D3FA      BCC         L_21  ; T=0x0000006E
+ 00000078            ; SCOPE-END
+   54: }
+ 00000078  BC10      POP         {R4}
+ 0000007A  4770      BX          R14
+ 0000007C          ENDP ; 'clcd?T'
+
+
+*** CODE SEGMENT '?PR?dlcd?T?project':
+   56: void dlcd(unsigned char val)
+ 00000000  B410      PUSH        {R4}
+ 00000002  1C03      MOV         R3,R0 ; val
+ 00000004  ---- Variable 'val' assigned to Register 'R3' ----
+   57: {
+ 00000004            ; SCOPE-START
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 16  
+
+   61:  IOSET1 = LCD_RS ;          // RS = 1 
+ 00000004  4800      LDR         R1,=0x10000
+ 00000006  4800      LDR         R0,=0xE0028014
+ 00000008  6001      STR         R1,[R0,#0x0]
+   63:  lcd_ch=((val>>4)&0x0F);    // Strobe 4-Bit High-Nibble to LCD
+ 0000000A  1C18      MOV         R0,R3 ; val
+ 0000000C  0602      LSL         R2,R0,#0x18 ; val
+ 0000000E  0E12      LSR         R2,R2,#0x18
+ 00000010  0912      LSR         R2,R2,#0x4
+ 00000012  200F      MOV         R0,#0xF
+ 00000014  4002      AND         R2,R0
+ 00000016  ---- Variable 'lcd_ch' assigned to Register 'R2' ----
+   65:  IOCLR1 = (LCD_D7|LCD_D6|LCD_D5|LCD_D4); // Reset 4-Bit Pin Data
+ 00000016  4800      LDR         R1,=0x3C0000
+ 00000018  4800      LDR         R0,=0xE002801C
+ 0000001A  6001      STR         R1,[R0,#0x0]
+   66:  IOSET1 = (lcd_ch<<18);                  // Data Send to Respective Pins  
+ 0000001C  1C11      MOV         R1,R2 ; lcd_ch
+ 0000001E  0489      LSL         R1,R1,#0x12
+ 00000020  4800      LDR         R0,=0xE0028014
+ 00000022  6001      STR         R1,[R0,#0x0]
+   67:  IOSET1 = LCD_EN ;                  // EN = 1 (Enable)
+ 00000024  4800      LDR         R1,=0x20000
+ 00000026  4800      LDR         R0,=0xE0028014
+ 00000028  6001      STR         R1,[R0,#0x0]
+   68:  for (lcd_i=0;lcd_i<10000;lcd_i++); // delay
+ 0000002A  2100      MOV         R1,#0x0
+ 0000002C  ---- Variable 'lcd_i' assigned to Register 'R1' ----
+ 0000002C          L_26:
+ 0000002C  3101      ADD         R1,#0x1
+ 0000002E  1C08      MOV         R0,R1 ; lcd_i
+ 00000030  4800      LDR         R4,=0x2710
+ 00000032  42A0      CMP         R0,R4 ; lcd_i
+ 00000034  D3FA      BCC         L_26  ; T=0x0000002C
+   69:  IOCLR1 = LCD_EN ;                  // EN = 0 (Disable) 
+ 00000036  4800      LDR         R1,=0x20000
+ 00000038  4800      LDR         R0,=0xE002801C
+ 0000003A  6001      STR         R1,[R0,#0x0]
+   71:  lcd_ch=(val&0x0F);                 // Strobe 4-Bit Low-Nibble to LCD
+ 0000003C  1C18      MOV         R0,R3 ; val
+ 0000003E  0602      LSL         R2,R0,#0x18 ; val
+ 00000040  0E12      LSR         R2,R2,#0x18
+ 00000042  200F      MOV         R0,#0xF
+ 00000044  4002      AND         R2,R0
+   73:  IOCLR1 = (LCD_D7|LCD_D6|LCD_D5|LCD_D4); // Reset 4-Bit Pin Data
+ 00000046  4800      LDR         R1,=0x3C0000
+ 00000048  4800      LDR         R0,=0xE002801C
+ 0000004A  6001      STR         R1,[R0,#0x0]
+   74:  IOSET1 = (lcd_ch<<18);                  // Data Send to Respective Pins   
+ 0000004C  1C11      MOV         R1,R2 ; lcd_ch
+ 0000004E  0489      LSL         R1,R1,#0x12
+ 00000050  4800      LDR         R0,=0xE0028014
+ 00000052  6001      STR         R1,[R0,#0x0]
+   76:  IOSET1 = LCD_EN ;                  // EN = 1 (Enable)
+ 00000054  4800      LDR         R1,=0x20000
+ 00000056  4800      LDR         R0,=0xE0028014
+ 00000058  6001      STR         R1,[R0,#0x0]
+   77:  for (lcd_i=0;lcd_i<10000;lcd_i++); //delay
+ 0000005A  2100      MOV         R1,#0x0
+ 0000005C          L_31:
+ 0000005C  3101      ADD         R1,#0x1
+ 0000005E  1C08      MOV         R0,R1 ; lcd_i
+ 00000060  4800      LDR         R2,=0x2710
+ 00000062  4290      CMP         R0,R2 ; lcd_i
+ 00000064  D3FA      BCC         L_31  ; T=0x0000005C
+   78:  IOCLR1 = LCD_EN ;                  // EN = 0 (Disable) 
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 17  
+
+ 00000066  4800      LDR         R1,=0x20000
+ 00000068  4800      LDR         R0,=0xE002801C
+ 0000006A  6001      STR         R1,[R0,#0x0]
+   80:  for (lcd_i=0;lcd_i<10000;lcd_i++);  //delay
+ 0000006C  2100      MOV         R1,#0x0
+ 0000006E          L_36:
+ 0000006E  3101      ADD         R1,#0x1
+ 00000070  1C08      MOV         R0,R1 ; lcd_i
+ 00000072  4800      LDR         R2,=0x2710
+ 00000074  4290      CMP         R0,R2 ; lcd_i
+ 00000076  D3FA      BCC         L_36  ; T=0x0000006E
+ 00000078            ; SCOPE-END
+   81: }
+ 00000078  BC10      POP         {R4}
+ 0000007A  4770      BX          R14
+ 0000007C          ENDP ; 'dlcd?T'
+
+
+*** CODE SEGMENT '?PR?initlcd?T?project':
+   83: void initlcd()
+ 00000000  B500      PUSH        {LR}
+   84: {
+ 00000002            ; SCOPE-START
+   87:  PINSEL2 |= 0x00000000;             // GPIO1[31..20] = I/O Function
+ 00000002  4800      LDR         R0,=0xE002C014
+ 00000004  6801      LDR         R1,[R0,#0x0]
+ 00000006  6001      STR         R1,[R0,#0x0]
+   88:  IODIR1  |= 0x003F0000 ;
+ 00000008  4800      LDR         R2,=0x3F0000
+ 0000000A  4800      LDR         R0,=0xE0028018
+ 0000000C  6801      LDR         R1,[R0,#0x0]
+ 0000000E  4311      ORR         R1,R2
+ 00000010  6001      STR         R1,[R0,#0x0]
+   90:  for (i=0;i<10000;i++);                             // Power-On Delay (15 mS)
+ 00000012  2000      MOV         R0,#0x0
+ 00000014  ---- Variable 'i' assigned to Register 'R0' ----
+ 00000014          L_41:
+ 00000014  3001      ADD         R0,#0x1
+ 00000016  1C01      MOV         R1,R0 ; i
+ 00000018  4800      LDR         R2,=0x2710
+ 0000001A  4291      CMP         R1,R2 ; i
+ 0000001C  D3FA      BCC         L_41  ; T=0x00000014
+   92:  IOCLR1 = ((LCD_D7|LCD_D6|LCD_D5|LCD_D4|LCD_RS|LCD_EN));                                    // Reset (RS,RW,EN,4-Bit Data) Pin
+ 0000001E  4800      LDR         R1,=0x3F0000
+ 00000020  4800      LDR         R0,=0xE002801C
+ 00000022  6001      STR         R1,[R0,#0x0]
+   93:  IOSET1 = (LCD_D5|LCD_D4);                              // DDDD:EN,RW,RS,0:0000:0000:0000:0000:0000:0000 
+ 00000024  4800      LDR         R1,=0xC0000
+ 00000026  4800      LDR         R0,=0xE0028014
+ 00000028  6001      STR         R1,[R0,#0x0]
+   94:  LCD_EN_on;                 // EN = 1 (Enable)
+ 0000002A  4800      LDR         R2,=0x20000
+ 0000002C  4800      LDR         R0,=0xE0028014
+ 0000002E  6801      LDR         R1,[R0,#0x0]
+ 00000030  4311      ORR         R1,R2
+ 00000032  6001      STR         R1,[R0,#0x0]
+   95:  for (i=0;i<10000;i++);
+ 00000034  2000      MOV         R0,#0x0
+ 00000036          L_46:
+ 00000036  3001      ADD         R0,#0x1
+ 00000038  1C01      MOV         R1,R0 ; i
+ 0000003A  4800      LDR         R2,=0x2710
+ 0000003C  4291      CMP         R1,R2 ; i
+ 0000003E  D3FA      BCC         L_46  ; T=0x00000036
+   96:  LCD_EN_off;                    // EN = 0 (Disable) 
+ 00000040  4800      LDR         R2,=0x20000
+ 00000042  4800      LDR         R0,=0xE002801C
+ 00000044  6801      LDR         R1,[R0,#0x0]
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 18  
+
+ 00000046  4311      ORR         R1,R2
+ 00000048  6001      STR         R1,[R0,#0x0]
+   97:  for (i=0;i<10000;i++);                             // Delay 4.1mS
+ 0000004A  2000      MOV         R0,#0x0
+ 0000004C          L_51:
+ 0000004C  3001      ADD         R0,#0x1
+ 0000004E  1C01      MOV         R1,R0 ; i
+ 00000050  4800      LDR         R2,=0x2710
+ 00000052  4291      CMP         R1,R2 ; i
+ 00000054  D3FA      BCC         L_51  ; T=0x0000004C
+   99:  IOCLR1 = ((LCD_D7|LCD_D6|LCD_D5|LCD_D4|LCD_RS|LCD_EN));                                    // Reset (RS,RW,EN,4-Bit Data) Pin
+ 00000056  4800      LDR         R1,=0x3F0000
+ 00000058  4800      LDR         R0,=0xE002801C
+ 0000005A  6001      STR         R1,[R0,#0x0]
+  100:  IOSET1 = (LCD_D5|LCD_D4);                              // DDDD:EN,RW,RS,0:0000:0000:0000:0000:0000:0000 
+ 0000005C  4800      LDR         R1,=0xC0000
+ 0000005E  4800      LDR         R0,=0xE0028014
+ 00000060  6001      STR         R1,[R0,#0x0]
+  101:  LCD_EN_on;                 // EN = 1 (Enable)
+ 00000062  4800      LDR         R2,=0x20000
+ 00000064  4800      LDR         R0,=0xE0028014
+ 00000066  6801      LDR         R1,[R0,#0x0]
+ 00000068  4311      ORR         R1,R2
+ 0000006A  6001      STR         R1,[R0,#0x0]
+  102:  for (i=0;i<10000;i++);
+ 0000006C  2000      MOV         R0,#0x0
+ 0000006E          L_56:
+ 0000006E  3001      ADD         R0,#0x1
+ 00000070  1C01      MOV         R1,R0 ; i
+ 00000072  4800      LDR         R2,=0x2710
+ 00000074  4291      CMP         R1,R2 ; i
+ 00000076  D3FA      BCC         L_56  ; T=0x0000006E
+  103:   LCD_EN_off;                   // EN = 0 (Disable) 
+ 00000078  4800      LDR         R2,=0x20000
+ 0000007A  4800      LDR         R0,=0xE002801C
+ 0000007C  6801      LDR         R1,[R0,#0x0]
+ 0000007E  4311      ORR         R1,R2
+ 00000080  6001      STR         R1,[R0,#0x0]
+  104:  for (i=0;i<10000;i++);                                 // delay 100uS
+ 00000082  2000      MOV         R0,#0x0
+ 00000084          L_61:
+ 00000084  3001      ADD         R0,#0x1
+ 00000086  1C01      MOV         R1,R0 ; i
+ 00000088  4800      LDR         R2,=0x2710
+ 0000008A  4291      CMP         R1,R2 ; i
+ 0000008C  D3FA      BCC         L_61  ; T=0x00000084
+  106:  IOCLR1 = ((LCD_D7|LCD_D6|LCD_D5|LCD_D4|LCD_RS|LCD_EN));                                    // Reset (RS,RW,EN,4-Bit Data) Pin
+ 0000008E  4800      LDR         R1,=0x3F0000
+ 00000090  4800      LDR         R0,=0xE002801C
+ 00000092  6001      STR         R1,[R0,#0x0]
+  107:  IOSET1 = (LCD_D5|LCD_D4);                              // DDDD:EN,RW,RS,0:0000:0000:0000:0000:0000:0000 
+ 00000094  4800      LDR         R1,=0xC0000
+ 00000096  4800      LDR         R0,=0xE0028014
+ 00000098  6001      STR         R1,[R0,#0x0]
+  108:  LCD_EN_on;                     // EN = 1 (Enable)
+ 0000009A  4800      LDR         R2,=0x20000
+ 0000009C  4800      LDR         R0,=0xE0028014
+ 0000009E  6801      LDR         R1,[R0,#0x0]
+ 000000A0  4311      ORR         R1,R2
+ 000000A2  6001      STR         R1,[R0,#0x0]
+  109:  for (i=0;i<10000;i++);
+ 000000A4  2000      MOV         R0,#0x0
+ 000000A6          L_66:
+ 000000A6  3001      ADD         R0,#0x1
+ 000000A8  1C01      MOV         R1,R0 ; i
+ 000000AA  4800      LDR         R2,=0x2710
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 19  
+
+ 000000AC  4291      CMP         R1,R2 ; i
+ 000000AE  D3FA      BCC         L_66  ; T=0x000000A6
+  110:  LCD_EN_off;                    // EN = 0 (Disable) 
+ 000000B0  4800      LDR         R2,=0x20000
+ 000000B2  4800      LDR         R0,=0xE002801C
+ 000000B4  6801      LDR         R1,[R0,#0x0]
+ 000000B6  4311      ORR         R1,R2
+ 000000B8  6001      STR         R1,[R0,#0x0]
+  111:  for (i=0;i<10000;i++);                   
+ 000000BA  2000      MOV         R0,#0x0
+ 000000BC          L_71:
+ 000000BC  3001      ADD         R0,#0x1
+ 000000BE  1C01      MOV         R1,R0 ; i
+ 000000C0  4800      LDR         R2,=0x2710
+ 000000C2  4291      CMP         R1,R2 ; i
+ 000000C4  D3FA      BCC         L_71  ; T=0x000000BC
+  113:  IOCLR1 = ((LCD_D7|LCD_D6|LCD_D5|LCD_D4|LCD_RS|LCD_EN));                                    // Reset (RS,RW,EN,4-Bit Data) Pin
+ 000000C6  4800      LDR         R1,=0x3F0000
+ 000000C8  4800      LDR         R0,=0xE002801C
+ 000000CA  6001      STR         R1,[R0,#0x0]
+  114:  IOSET1 = (LCD_D5);                                 // DDDD:EN,RW,RS,0:0000:0000:0000:0000:0000:0000 
+ 000000CC  4800      LDR         R1,=0x80000
+ 000000CE  4800      LDR         R0,=0xE0028014
+ 000000D0  6001      STR         R1,[R0,#0x0]
+  115:  LCD_EN_on;                 // EN = 1 (Enable)
+ 000000D2  4800      LDR         R2,=0x20000
+ 000000D4  4800      LDR         R0,=0xE0028014
+ 000000D6  6801      LDR         R1,[R0,#0x0]
+ 000000D8  4311      ORR         R1,R2
+ 000000DA  6001      STR         R1,[R0,#0x0]
+  116:  for (i=0;i<10000;i++);
+ 000000DC  2000      MOV         R0,#0x0
+ 000000DE          L_76:
+ 000000DE  3001      ADD         R0,#0x1
+ 000000E0  1C01      MOV         R1,R0 ; i
+ 000000E2  4800      LDR         R2,=0x2710
+ 000000E4  4291      CMP         R1,R2 ; i
+ 000000E6  D3FA      BCC         L_76  ; T=0x000000DE
+  117:  LCD_EN_off;                    // EN = 0 (Disable) 
+ 000000E8  4800      LDR         R2,=0x20000
+ 000000EA  4800      LDR         R0,=0xE002801C
+ 000000EC  6801      LDR         R1,[R0,#0x0]
+ 000000EE  4311      ORR         R1,R2
+ 000000F0  6001      STR         R1,[R0,#0x0]
+  118:  for (i=0;i<10000;i++);   
+ 000000F2  2000      MOV         R0,#0x0
+ 000000F4          L_81:
+ 000000F4  3001      ADD         R0,#0x1
+ 000000F6  1C01      MOV         R1,R0 ; i
+ 000000F8  4800      LDR         R2,=0x2710
+ 000000FA  4291      CMP         R1,R2 ; i
+ 000000FC  D3FA      BCC         L_81  ; T=0x000000F4
+  120:  clcd(0x02);    
+ 000000FE  2002      MOV         R0,#0x2
+ 00000100  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000102  FF7E      BL          clcd?T  ; T=0x0001  (2)
+  121:  clcd(0x02);
+ 00000104  2002      MOV         R0,#0x2
+ 00000106  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000108  FF7B      BL          clcd?T  ; T=0x0001  (2)
+  122:  clcd(0x28);  //intialise the lcd in 4 bit mode*/
+ 0000010A  2028      MOV         R0,#0x28
+ 0000010C  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000010E  FF78      BL          clcd?T  ; T=0x0001  (2)
+  123:  clcd(0x28);  //intialise the lcd in 4 bit mode*/
+ 00000110  2028      MOV         R0,#0x28
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 20  
+
+ 00000112  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000114  FF75      BL          clcd?T  ; T=0x0001  (2)
+  125:  clcd(0x0e);    //cursor blinking
+ 00000116  200E      MOV         R0,#0xE
+ 00000118  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000011A  FF72      BL          clcd?T  ; T=0x0001  (2)
+  126:  clcd(0x06);    //move the cursor to right side
+ 0000011C  2006      MOV         R0,#0x6
+ 0000011E  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000120  FF6F      BL          clcd?T  ; T=0x0001  (2)
+  127:  clcd(0x01);    //clear the lcd
+ 00000122  2001      MOV         R0,#0x1
+ 00000124  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000126  FF6C      BL          clcd?T  ; T=0x0001  (2)
+ 00000128            ; SCOPE-END
+  129: }
+ 00000128  BC08      POP         {R3}
+ 0000012A  4718      BX          R3
+ 0000012C          ENDP ; 'initlcd?T'
+
+
+*** CODE SEGMENT '?PR?stringlcd?T?project':
+  132: void stringlcd(unsigned char ch,unsigned char str[])
+ 00000000  B570      PUSH        {R4-R6,LR}
+ 00000002  1C0E      MOV         R6,R1 ; str
+ 00000004  ---- Variable 'str' assigned to Register 'R6' ----
+ 00000004  1C04      MOV         R4,R0 ; ch
+ 00000006  ---- Variable 'ch' assigned to Register 'R4' ----
+  133: {
+ 00000006            ; SCOPE-START
+  134:  unsigned char i,Count=0;
+ 00000006  2500      MOV         R5,#0x0
+ 00000008  ---- Variable 'Count' assigned to Register 'R5' ----
+  135:  if(ch==0x80){clcd(0x01);}
+ 00000008  1C20      MOV         R0,R4 ; ch
+ 0000000A  0600      LSL         R0,R0,#0x18 ; ch
+ 0000000C  0E00      LSR         R0,R0,#0x18
+ 0000000E  2880      CMP         R0,#0x80
+ 00000010  D102      BNE         L_86  ; T=0x00000018
+ 00000012  2001      MOV         R0,#0x1
+ 00000014  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000016  FFF4      BL          clcd?T  ; T=0x0001  (2)
+ 00000018          L_86:
+  136:  clcd(ch);
+ 00000018  1C20      MOV         R0,R4 ; ch
+ 0000001A  0600      LSL         R0,R0,#0x18 ; ch
+ 0000001C  0E00      LSR         R0,R0,#0x18
+ 0000001E  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000020  FFEF      BL          clcd?T  ; T=0x0001  (2)
+  139:   for(i=0;str[i]!='\0';i++)
+ 00000022  2400      MOV         R4,#0x0
+ 00000024  ---- Variable 'i' assigned to Register 'R4' ----
+ 00000024  E01E      B           L_89  ; T=0x00000064
+ 00000026          L_90:
+  141:       Count=Count+1;
+ 00000026  1C28      MOV         R0,R5 ; Count
+ 00000028  0605      LSL         R5,R0,#0x18 ; Count
+ 0000002A  0E2D      LSR         R5,R5,#0x18
+ 0000002C  3501      ADD         R5,#0x1
+  143:     dlcd(str[i]);
+ 0000002E  1C20      MOV         R0,R4 ; i
+ 00000030  0602      LSL         R2,R0,#0x18 ; i
+ 00000032  0E12      LSR         R2,R2,#0x18
+ 00000034  1C30      MOV         R0,R6 ; str
+ 00000036  5C80      LDRB        R0,[R0,R2]
+ 00000038  F7FF      BL          dlcd?T  ; T=0x0001  (1)
+ 0000003A  FFE2      BL          dlcd?T  ; T=0x0001  (2)
+  145:     if(Count == 20)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 21  
+
+ 0000003C  1C28      MOV         R0,R5 ; Count
+ 0000003E  0600      LSL         R0,R0,#0x18 ; Count
+ 00000040  0E00      LSR         R0,R0,#0x18
+ 00000042  2814      CMP         R0,#0x14
+ 00000044  D102      BNE         L_92  ; T=0x0000004C
+  146:      clcd(0xc0);
+ 00000046  20C0      MOV         R0,#0xC0
+ 00000048  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000004A  FFDA      BL          clcd?T  ; T=0x0001  (2)
+ 0000004C          L_92:
+  147:     if(Count >= 32)
+ 0000004C  1C28      MOV         R0,R5 ; Count
+ 0000004E  0600      LSL         R0,R0,#0x18 ; Count
+ 00000050  0E00      LSR         R0,R0,#0x18
+ 00000052  2820      CMP         R0,#0x20
+ 00000054  DB03      BLT         L_87  ; T=0x0000005E
+  149:      Count = 0;
+ 00000056  2500      MOV         R5,#0x0
+  150:      clcd(0x01);
+ 00000058  2001      MOV         R0,#0x1
+ 0000005A  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000005C  FFD1      BL          clcd?T  ; T=0x0001  (2)
+  152:   }
+ 0000005E          L_87:
+ 0000005E  3401      ADD         R4,#0x1
+ 00000060  0624      LSL         R4,R4,#0x18
+ 00000062  0E24      LSR         R4,R4,#0x18
+ 00000064          L_89:
+ 00000064  1C20      MOV         R0,R4 ; i
+ 00000066  0602      LSL         R2,R0,#0x18 ; i
+ 00000068  0E12      LSR         R2,R2,#0x18
+ 0000006A  1C30      MOV         R0,R6 ; str
+ 0000006C  5C80      LDRB        R0,[R0,R2]
+ 0000006E  2800      CMP         R0,#0x0
+ 00000070  D1D9      BNE         L_90  ; T=0x00000026
+ 00000072            ; SCOPE-END
+  154: }
+ 00000072  BC70      POP         {R4-R6}
+ 00000074  BC08      POP         {R3}
+ 00000076  4718      BX          R3
+ 00000078          ENDP ; 'stringlcd?T'
+
+
+*** CODE SEGMENT '?PR?conv?T?project':
+  158:  void conv(unsigned int temp1_value)  
+ 00000000  B570      PUSH        {R4-R6,LR}
+ 00000002  1C02      MOV         R2,R0 ; temp1_value
+ 00000004  ---- Variable 'temp1_value' assigned to Register 'R2' ----
+  159:           {
+ 00000004            ; SCOPE-START
+  161:               value=temp1_value/10;
+ 00000004  1C10      MOV         R0,R2 ; temp1_value
+ 00000006  210A      MOV         R1,#0xA
+ 00000008  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 0000000A  FFFA      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 0000000C  1C08      MOV         R0,R1
+ 0000000E  1C03      MOV         R3,R0
+ 00000010  ---- Variable 'value' assigned to Register 'R3' ----
+  162:               d4=temp1_value%10;
+ 00000010  1C10      MOV         R0,R2 ; temp1_value
+ 00000012  210A      MOV         R1,#0xA
+ 00000014  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000016  FFF4      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000018  1C01      MOV         R1,R0
+ 0000001A  1C0C      MOV         R4,R1
+ 0000001C  ---- Variable 'd4' assigned to Register 'R4' ----
+  163:               val1=value/10;
+ 0000001C  1C18      MOV         R0,R3 ; value
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 22  
+
+ 0000001E  0600      LSL         R0,R0,#0x18 ; value
+ 00000020  0E00      LSR         R0,R0,#0x18
+ 00000022  210A      MOV         R1,#0xA
+ 00000024  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000026  FFEC      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000028  1C08      MOV         R0,R1
+ 0000002A  1C02      MOV         R2,R0
+ 0000002C  ---- Variable 'val1' assigned to Register 'R2' ----
+  164:               d3=value%10;
+ 0000002C  1C18      MOV         R0,R3 ; value
+ 0000002E  0600      LSL         R0,R0,#0x18 ; value
+ 00000030  0E00      LSR         R0,R0,#0x18
+ 00000032  210A      MOV         R1,#0xA
+ 00000034  F7FF      BL          ?C?SDIV?T  ; T=0x0001  (1) ; ?C?SDIV?T
+ 00000036  FFE4      BL          ?C?SDIV?T  ; T=0x0001  (2) ; ?C?SDIV?T
+ 00000038  1C01      MOV         R1,R0
+ 0000003A  1C0D      MOV         R5,R1
+ 0000003C  ---- Variable 'd3' assigned to Register 'R5' ----
+  165:               d2=val1%10;
+ 0000003C  1C10      MOV         R0,R2 ; val1
+ 0000003E  0600      LSL         R0,R0,#0x18 ; val1
+ 00000040  0E00      LSR         R0,R0,#0x18
+ 00000042  210A      MOV         R1,#0xA
+ 00000044  F7FF      BL          ?C?SDIV?T  ; T=0x0001  (1) ; ?C?SDIV?T
+ 00000046  FFDC      BL          ?C?SDIV?T  ; T=0x0001  (2) ; ?C?SDIV?T
+ 00000048  1C01      MOV         R1,R0
+ 0000004A  1C0E      MOV         R6,R1
+ 0000004C  ---- Variable 'd2' assigned to Register 'R6' ----
+  166:               d1=val1/10;
+ 0000004C  1C10      MOV         R0,R2 ; val1
+ 0000004E  0600      LSL         R0,R0,#0x18 ; val1
+ 00000050  0E00      LSR         R0,R0,#0x18
+ 00000052  210A      MOV         R1,#0xA
+ 00000054  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000056  FFD4      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000058  1C08      MOV         R0,R1
+ 0000005A  ---- Variable 'd1' assigned to Register 'R1' ----
+  168:              dlcd(d1+48);
+ 0000005A  1C08      MOV         R0,R1 ; d1
+ 0000005C  0600      LSL         R0,R0,#0x18 ; d1
+ 0000005E  0E00      LSR         R0,R0,#0x18
+ 00000060  3030      ADD         R0,#0x30
+ 00000062  F7FF      BL          dlcd?T  ; T=0x0001  (1)
+ 00000064  FFCD      BL          dlcd?T  ; T=0x0001  (2)
+  169:              dlcd(d2+48);
+ 00000066  1C30      MOV         R0,R6 ; d2
+ 00000068  0600      LSL         R0,R0,#0x18 ; d2
+ 0000006A  0E00      LSR         R0,R0,#0x18
+ 0000006C  3030      ADD         R0,#0x30
+ 0000006E  F7FF      BL          dlcd?T  ; T=0x0001  (1)
+ 00000070  FFC7      BL          dlcd?T  ; T=0x0001  (2)
+  170:              dlcd(d3+48);
+ 00000072  1C28      MOV         R0,R5 ; d3
+ 00000074  0600      LSL         R0,R0,#0x18 ; d3
+ 00000076  0E00      LSR         R0,R0,#0x18
+ 00000078  3030      ADD         R0,#0x30
+ 0000007A  F7FF      BL          dlcd?T  ; T=0x0001  (1)
+ 0000007C  FFC1      BL          dlcd?T  ; T=0x0001  (2)
+  171:              dlcd(d4+48);
+ 0000007E  1C20      MOV         R0,R4 ; d4
+ 00000080  0600      LSL         R0,R0,#0x18 ; d4
+ 00000082  0E00      LSR         R0,R0,#0x18
+ 00000084  3030      ADD         R0,#0x30
+ 00000086  F7FF      BL          dlcd?T  ; T=0x0001  (1)
+ 00000088  FFBB      BL          dlcd?T  ; T=0x0001  (2)
+ 0000008A            ; SCOPE-END
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 23  
+
+  174:           }
+ 0000008A  BC70      POP         {R4-R6}
+ 0000008C  BC08      POP         {R3}
+ 0000008E  4718      BX          R3
+ 00000090          ENDP ; 'conv?T'
+
+
+*** CODE SEGMENT '?PR?ser_init_1?T?project':
+    1: void ser_init_1(unsigned char dll,unsigned char dlm)
+ 00000000  ---- Variable 'dlm' assigned to Register 'R1' ----
+ 00000000  1C02      MOV         R2,R0 ; dll
+ 00000002  ---- Variable 'dll' assigned to Register 'R2' ----
+    3:    U1FCR=0x00; //07
+ 00000002  2300      MOV         R3,#0x0
+ 00000004  4800      LDR         R0,=0xE0010008
+ 00000006  6003      STR         R3,[R0,#0x0]
+    4:    U1LCR=0x83;
+ 00000008  2383      MOV         R3,#0x83
+ 0000000A  4800      LDR         R0,=0xE001000C
+ 0000000C  6003      STR         R3,[R0,#0x0]
+    5:    U1DLL=dll;   
+ 0000000E  1C10      MOV         R0,R2 ; dll
+ 00000010  0602      LSL         R2,R0,#0x18 ; dll
+ 00000012  0E12      LSR         R2,R2,#0x18
+ 00000014  4800      LDR         R0,=0xE0010000
+ 00000016  6002      STR         R2,[R0,#0x0]
+    6:    U1DLM=dlm;   
+ 00000018  1C08      MOV         R0,R1 ; dlm
+ 0000001A  0601      LSL         R1,R0,#0x18 ; dlm
+ 0000001C  0E09      LSR         R1,R1,#0x18
+ 0000001E  4800      LDR         R0,=0xE0010004
+ 00000020  6001      STR         R1,[R0,#0x0]
+    7:    U1LCR=0x03;
+ 00000022  2103      MOV         R1,#0x3
+ 00000024  4800      LDR         R0,=0xE001000C
+ 00000026  6001      STR         R1,[R0,#0x0]
+    8: }
+ 00000028  4770      BX          R14
+ 0000002A          ENDP ; 'ser_init_1?T'
+
+
+*** CODE SEGMENT '?PR?send_1?T?project':
+    9: void send_1(unsigned char ch)// tx an assic value
+ 00000000  1C01      MOV         R1,R0 ; ch
+ 00000002  ---- Variable 'ch' assigned to Register 'R1' ----
+   11: U1THR=ch;
+ 00000002  1C08      MOV         R0,R1 ; ch
+ 00000004  0601      LSL         R1,R0,#0x18 ; ch
+ 00000006  0E09      LSR         R1,R1,#0x18
+ 00000008  4800      LDR         R0,=0xE0010000
+ 0000000A  6001      STR         R1,[R0,#0x0]
+   12: while(!(U1LSR&0X20));// CHECK THE TX HOLDING REGISTER
+ 0000000C          L_94:
+ 0000000C  4800      LDR         R0,=0xE0010014
+ 0000000E  6800      LDR         R0,[R0,#0x0]
+ 00000010  2120      MOV         R1,#0x20
+ 00000012  4208      TST         R0,R1
+ 00000014  D0FA      BEQ         L_94  ; T=0x0000000C
+   13: }
+ 00000016  4770      BX          R14
+ 00000018          ENDP ; 'send_1?T'
+
+
+*** CODE SEGMENT '?PR?receive_1?T?project':
+   15: {
+ 00000000            ; SCOPE-START
+   17:  while(!(U1LSR&0x01));
+ 00000000          L_98:
+ 00000000  4800      LDR         R0,=0xE0010014
+ 00000002  6800      LDR         R0,[R0,#0x0]
+ 00000004  2101      MOV         R1,#0x1
+ 00000006  4208      TST         R0,R1
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 24  
+
+ 00000008  D0FA      BEQ         L_98  ; T=0x00000000
+   18:  ch=U1RBR;
+ 0000000A  4800      LDR         R0,=0xE0010000
+ 0000000C  6801      LDR         R1,[R0,#0x0]
+ 0000000E  ---- Variable 'ch' assigned to Register 'R1' ----
+   19:  return ch;
+ 0000000E  1C08      MOV         R0,R1 ; ch
+ 00000010  0600      LSL         R0,R0,#0x18 ; ch
+ 00000012  0E00      LSR         R0,R0,#0x18
+ 00000014            ; SCOPE-END
+   20: }
+ 00000014  4770      BX          R14
+ 00000016          ENDP ; 'receive_1?T'
+
+
+*** CODE SEGMENT '?PR?string_1?T?project':
+   21: void string_1(unsigned char *str)
+ 00000000  B500      PUSH        {LR}
+ 00000002  1C03      MOV         R3,R0 ; str
+ 00000004  ---- Variable 'str' assigned to Register 'R3' ----
+   22: {
+ 00000004            ; SCOPE-START
+   23:  unsigned int i=0;
+ 00000004  2200      MOV         R2,#0x0
+ 00000006  ---- Variable 'i' assigned to Register 'R2' ----
+   24:  while(str[i]!='\0')
+ 00000006  E005      B           L_103  ; T=0x00000014
+ 00000008          L_105:
+   26:    send_1(str[i]);
+ 00000008  1C11      MOV         R1,R2 ; i
+ 0000000A  1C18      MOV         R0,R3 ; str
+ 0000000C  5C40      LDRB        R0,[R0,R1]
+ 0000000E  F7FF      BL          send_1?T  ; T=0x0001  (1)
+ 00000010  FFF7      BL          send_1?T  ; T=0x0001  (2)
+   27:    i++;
+ 00000012  3201      ADD         R2,#0x1
+   28:  }
+ 00000014          L_103:
+ 00000014  1C11      MOV         R1,R2 ; i
+ 00000016  1C18      MOV         R0,R3 ; str
+ 00000018  5C40      LDRB        R0,[R0,R1]
+ 0000001A  2800      CMP         R0,#0x0
+ 0000001C  D1F4      BNE         L_105  ; T=0x00000008
+ 0000001E            ; SCOPE-END
+   29: }
+ 0000001E  BC08      POP         {R3}
+ 00000020  4718      BX          R3
+ 00000022          ENDP ; 'string_1?T'
+
+
+*** CODE SEGMENT '?PR?ser_init_0?T?project':
+   31: void ser_init_0(unsigned char dll,unsigned char dlm)
+ 00000000  ---- Variable 'dlm' assigned to Register 'R1' ----
+ 00000000  1C02      MOV         R2,R0 ; dll
+ 00000002  ---- Variable 'dll' assigned to Register 'R2' ----
+   33:    U0FCR=0x00;//07
+ 00000002  2300      MOV         R3,#0x0
+ 00000004  4800      LDR         R0,=0xE000C008
+ 00000006  6003      STR         R3,[R0,#0x0]
+   34:    U0LCR=0x83;
+ 00000008  2383      MOV         R3,#0x83
+ 0000000A  4800      LDR         R0,=0xE000C00C
+ 0000000C  6003      STR         R3,[R0,#0x0]
+   35:    U0DLL=dll;   
+ 0000000E  1C10      MOV         R0,R2 ; dll
+ 00000010  0602      LSL         R2,R0,#0x18 ; dll
+ 00000012  0E12      LSR         R2,R2,#0x18
+ 00000014  4800      LDR         R0,=0xE000C000
+ 00000016  6002      STR         R2,[R0,#0x0]
+   36:    U0DLM=dlm;   
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 25  
+
+ 00000018  1C08      MOV         R0,R1 ; dlm
+ 0000001A  0601      LSL         R1,R0,#0x18 ; dlm
+ 0000001C  0E09      LSR         R1,R1,#0x18
+ 0000001E  4800      LDR         R0,=0xE000C004
+ 00000020  6001      STR         R1,[R0,#0x0]
+   37:    U0LCR=0x03;
+ 00000022  2103      MOV         R1,#0x3
+ 00000024  4800      LDR         R0,=0xE000C00C
+ 00000026  6001      STR         R1,[R0,#0x0]
+   38: }
+ 00000028  4770      BX          R14
+ 0000002A          ENDP ; 'ser_init_0?T'
+
+
+*** CODE SEGMENT '?PR?send_0?T?project':
+   39: void send_0(unsigned char ch)// tx an assic value
+ 00000000  1C01      MOV         R1,R0 ; ch
+ 00000002  ---- Variable 'ch' assigned to Register 'R1' ----
+   41: U0THR=ch;
+ 00000002  1C08      MOV         R0,R1 ; ch
+ 00000004  0601      LSL         R1,R0,#0x18 ; ch
+ 00000006  0E09      LSR         R1,R1,#0x18
+ 00000008  4800      LDR         R0,=0xE000C000
+ 0000000A  6001      STR         R1,[R0,#0x0]
+   42: while(!(U0LSR&0X20));// CHECK THE TX HOLDING REGISTER
+ 0000000C          L_107:
+ 0000000C  4800      LDR         R0,=0xE000C014
+ 0000000E  6800      LDR         R0,[R0,#0x0]
+ 00000010  2120      MOV         R1,#0x20
+ 00000012  4208      TST         R0,R1
+ 00000014  D0FA      BEQ         L_107  ; T=0x0000000C
+   43: }
+ 00000016  4770      BX          R14
+ 00000018          ENDP ; 'send_0?T'
+
+
+*** CODE SEGMENT '?PR?receive_0?T?project':
+   45: {
+ 00000000            ; SCOPE-START
+   47:  while(!(U0LSR&0x01));
+ 00000000          L_111:
+ 00000000  4800      LDR         R0,=0xE000C014
+ 00000002  6800      LDR         R0,[R0,#0x0]
+ 00000004  2101      MOV         R1,#0x1
+ 00000006  4208      TST         R0,R1
+ 00000008  D0FA      BEQ         L_111  ; T=0x00000000
+   48:  ch=U0RBR;
+ 0000000A  4800      LDR         R0,=0xE000C000
+ 0000000C  6801      LDR         R1,[R0,#0x0]
+ 0000000E  ---- Variable 'ch' assigned to Register 'R1' ----
+   49:  return ch;
+ 0000000E  1C08      MOV         R0,R1 ; ch
+ 00000010  0600      LSL         R0,R0,#0x18 ; ch
+ 00000012  0E00      LSR         R0,R0,#0x18
+ 00000014            ; SCOPE-END
+   50: }
+ 00000014  4770      BX          R14
+ 00000016          ENDP ; 'receive_0?T'
+
+
+*** CODE SEGMENT '?PR?string_0?T?project':
+   51: void string_0(unsigned char *str)
+ 00000000  B500      PUSH        {LR}
+ 00000002  1C03      MOV         R3,R0 ; str
+ 00000004  ---- Variable 'str' assigned to Register 'R3' ----
+   52: {
+ 00000004            ; SCOPE-START
+   53:  unsigned int i=0;
+ 00000004  2200      MOV         R2,#0x0
+ 00000006  ---- Variable 'i' assigned to Register 'R2' ----
+   54:  while(str[i]!='\0')
+ 00000006  E005      B           L_116  ; T=0x00000014
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 26  
+
+ 00000008          L_118:
+   56:    send_0(str[i]);
+ 00000008  1C11      MOV         R1,R2 ; i
+ 0000000A  1C18      MOV         R0,R3 ; str
+ 0000000C  5C40      LDRB        R0,[R0,R1]
+ 0000000E  F7FF      BL          send_0?T  ; T=0x0001  (1)
+ 00000010  FFF7      BL          send_0?T  ; T=0x0001  (2)
+   57:    i++;
+ 00000012  3201      ADD         R2,#0x1
+   58:  }
+ 00000014          L_116:
+ 00000014  1C11      MOV         R1,R2 ; i
+ 00000016  1C18      MOV         R0,R3 ; str
+ 00000018  5C40      LDRB        R0,[R0,R1]
+ 0000001A  2800      CMP         R0,#0x0
+ 0000001C  D1F4      BNE         L_118  ; T=0x00000008
+ 0000001E            ; SCOPE-END
+   59: }
+ 0000001E  BC08      POP         {R3}
+ 00000020  4718      BX          R3
+ 00000022          ENDP ; 'string_0?T'
+
+
+*** CODE SEGMENT '?PR?conv_serial_0?T?project':
+   60: void conv_serial_0(unsigned long int ch)
+ 00000000  B500      PUSH        {LR}
+ 00000002  ---- Variable 'ch' assigned to Register 'R0' ----
+   61:  {
+ 00000002            ; SCOPE-START
+   62:  unsigned long int temp=0,temp2=0;
+ 00000002  2300      MOV         R3,#0x0
+ 00000004  ---- Variable 'temp' assigned to Register 'R3' ----
+ 00000004  2200      MOV         R2,#0x0
+ 00000006  ---- Variable 'temp2' assigned to Register 'R2' ----
+   63:  temp2=ch;
+ 00000006  1C02      MOV         R2,R0 ; ch
+   64:  temp=temp2/10000;
+ 00000008  4800      LDR         R1,=0x2710
+ 0000000A  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 0000000C  FFF9      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 0000000E  1C08      MOV         R0,R1
+ 00000010  1C03      MOV         R3,R0 ; temp
+   66:  temp2=temp2%10000;
+ 00000012  1C10      MOV         R0,R2 ; temp2
+ 00000014  4800      LDR         R1,=0x2710
+ 00000016  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000018  FFF3      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 0000001A  1C01      MOV         R1,R0
+ 0000001C  1C0A      MOV         R2,R1 ; temp2
+   67:  temp=temp2/1000;
+ 0000001E  1C10      MOV         R0,R2 ; temp2
+ 00000020  49FA      LDR         R1,=0x3E8
+ 00000022  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000024  FFED      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000026  1C08      MOV         R0,R1
+ 00000028  1C03      MOV         R3,R0 ; temp
+   68:  send_0(temp+0x30); 
+ 0000002A  3030      ADD         R0,#0x30
+ 0000002C  F7FF      BL          send_0?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          send_0?T  ; T=0x0001  (2)
+   69:  temp2=temp2%1000;
+ 00000030  1C10      MOV         R0,R2 ; temp2
+ 00000032  49FA      LDR         R1,=0x3E8
+ 00000034  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000036  FFE4      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000038  1C01      MOV         R1,R0
+ 0000003A  1C0A      MOV         R2,R1 ; temp2
+   70:  temp=temp2/100;
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 27  
+
+ 0000003C  1C10      MOV         R0,R2 ; temp2
+ 0000003E  2164      MOV         R1,#0x64
+ 00000040  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000042  FFDE      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000044  1C08      MOV         R0,R1
+ 00000046  1C03      MOV         R3,R0 ; temp
+   71:  send_0(temp+0x30); 
+ 00000048  3030      ADD         R0,#0x30
+ 0000004A  F7FF      BL          send_0?T  ; T=0x0001  (1)
+ 0000004C  FFD9      BL          send_0?T  ; T=0x0001  (2)
+   72:  temp2=temp2%100;
+ 0000004E  1C10      MOV         R0,R2 ; temp2
+ 00000050  2164      MOV         R1,#0x64
+ 00000052  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000054  FFD5      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000056  1C01      MOV         R1,R0
+ 00000058  1C0A      MOV         R2,R1 ; temp2
+   73:  temp=temp2/10;
+ 0000005A  1C10      MOV         R0,R2 ; temp2
+ 0000005C  210A      MOV         R1,#0xA
+ 0000005E  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000060  FFCF      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000062  1C08      MOV         R0,R1
+ 00000064  1C03      MOV         R3,R0 ; temp
+   74:  send_0(temp+0x30);
+ 00000066  3030      ADD         R0,#0x30
+ 00000068  F7FF      BL          send_0?T  ; T=0x0001  (1)
+ 0000006A  FFCA      BL          send_0?T  ; T=0x0001  (2)
+   75:  temp2=temp2%10;
+ 0000006C  1C10      MOV         R0,R2 ; temp2
+ 0000006E  210A      MOV         R1,#0xA
+ 00000070  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000072  FFC6      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000074  1C01      MOV         R1,R0
+ 00000076  1C0A      MOV         R2,R1 ; temp2
+   76:  send_0(temp2+0x30);
+ 00000078  1C10      MOV         R0,R2 ; temp2
+ 0000007A  3030      ADD         R0,#0x30
+ 0000007C  F7FF      BL          send_0?T  ; T=0x0001  (1)
+ 0000007E  FFC0      BL          send_0?T  ; T=0x0001  (2)
+ 00000080            ; SCOPE-END
+   77:  }
+ 00000080  BC08      POP         {R3}
+ 00000082  4718      BX          R3
+ 00000084          ENDP ; 'conv_serial_0?T'
+
+
+*** CODE SEGMENT '?PR?conv_serial_1?T?project':
+   78:  void conv_serial_1(unsigned long int ch)
+ 00000000  B500      PUSH        {LR}
+ 00000002  ---- Variable 'ch' assigned to Register 'R0' ----
+   79:  {
+ 00000002            ; SCOPE-START
+   80:  unsigned long int temp=0,temp2=0;
+ 00000002  2300      MOV         R3,#0x0
+ 00000004  ---- Variable 'temp' assigned to Register 'R3' ----
+ 00000004  2200      MOV         R2,#0x0
+ 00000006  ---- Variable 'temp2' assigned to Register 'R2' ----
+   81:  temp2=ch;
+ 00000006  1C02      MOV         R2,R0 ; ch
+   82:  temp=temp2/10000;
+ 00000008  4800      LDR         R1,=0x2710
+ 0000000A  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 0000000C  FFF9      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 0000000E  1C08      MOV         R0,R1
+ 00000010  1C03      MOV         R3,R0 ; temp
+   84:  temp2=temp2%10000;
+ 00000012  1C10      MOV         R0,R2 ; temp2
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 28  
+
+ 00000014  4800      LDR         R1,=0x2710
+ 00000016  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000018  FFF3      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 0000001A  1C01      MOV         R1,R0
+ 0000001C  1C0A      MOV         R2,R1 ; temp2
+   85:  temp=temp2/1000;
+ 0000001E  1C10      MOV         R0,R2 ; temp2
+ 00000020  49FA      LDR         R1,=0x3E8
+ 00000022  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000024  FFED      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000026  1C08      MOV         R0,R1
+ 00000028  1C03      MOV         R3,R0 ; temp
+   86:  send_1(temp+0x30);
+ 0000002A  3030      ADD         R0,#0x30
+ 0000002C  F7FF      BL          send_1?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          send_1?T  ; T=0x0001  (2)
+   87:  temp2=temp2%1000;
+ 00000030  1C10      MOV         R0,R2 ; temp2
+ 00000032  49FA      LDR         R1,=0x3E8
+ 00000034  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000036  FFE4      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000038  1C01      MOV         R1,R0
+ 0000003A  1C0A      MOV         R2,R1 ; temp2
+   88:  temp=temp2/100;
+ 0000003C  1C10      MOV         R0,R2 ; temp2
+ 0000003E  2164      MOV         R1,#0x64
+ 00000040  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000042  FFDE      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000044  1C08      MOV         R0,R1
+ 00000046  1C03      MOV         R3,R0 ; temp
+   89:  send_1(temp+0x30); 
+ 00000048  3030      ADD         R0,#0x30
+ 0000004A  F7FF      BL          send_1?T  ; T=0x0001  (1)
+ 0000004C  FFD9      BL          send_1?T  ; T=0x0001  (2)
+   90:  temp2=temp2%100;
+ 0000004E  1C10      MOV         R0,R2 ; temp2
+ 00000050  2164      MOV         R1,#0x64
+ 00000052  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000054  FFD5      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000056  1C01      MOV         R1,R0
+ 00000058  1C0A      MOV         R2,R1 ; temp2
+   91:  temp=temp2/10;
+ 0000005A  1C10      MOV         R0,R2 ; temp2
+ 0000005C  210A      MOV         R1,#0xA
+ 0000005E  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000060  FFCF      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000062  1C08      MOV         R0,R1
+ 00000064  1C03      MOV         R3,R0 ; temp
+   92:  send_1(temp+0x30);
+ 00000066  3030      ADD         R0,#0x30
+ 00000068  F7FF      BL          send_1?T  ; T=0x0001  (1)
+ 0000006A  FFCA      BL          send_1?T  ; T=0x0001  (2)
+   93:  temp2=temp2%10;
+ 0000006C  1C10      MOV         R0,R2 ; temp2
+ 0000006E  210A      MOV         R1,#0xA
+ 00000070  F7FF      BL          ?C?UDIV?T  ; T=0x0001  (1) ; ?C?UDIV?T
+ 00000072  FFC6      BL          ?C?UDIV?T  ; T=0x0001  (2) ; ?C?UDIV?T
+ 00000074  1C01      MOV         R1,R0
+ 00000076  1C0A      MOV         R2,R1 ; temp2
+   94:  send_1(temp2+0x30);
+ 00000078  1C10      MOV         R0,R2 ; temp2
+ 0000007A  3030      ADD         R0,#0x30
+ 0000007C  F7FF      BL          send_1?T  ; T=0x0001  (1)
+ 0000007E  FFC0      BL          send_1?T  ; T=0x0001  (2)
+ 00000080            ; SCOPE-END
+ 00000080  BC08      POP         {R3}
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 29  
+
+ 00000082  4718      BX          R3
+ 00000084          ENDP ; 'conv_serial_1?T'
+
+
+*** CODE SEGMENT '?PR?as1?T?project':
+   37: unsigned long int as1()
+ 00000000  B500      PUSH        {LR}
+   39:  AD0CR&=0XFFFFFF00;
+ 00000002  22FF      MOV         R2,#0xFF
+ 00000004  4800      LDR         R0,=0xE0034000
+ 00000006  6801      LDR         R1,[R0,#0x0]
+ 00000008  4391      BIC         R1,R2
+ 0000000A  6001      STR         R1,[R0,#0x0]
+   40:  AD0CR|=0X01000002;
+ 0000000C  4800      LDR         R2,=0x1000002
+ 0000000E  4800      LDR         R0,=0xE0034000
+ 00000010  6801      LDR         R1,[R0,#0x0]
+ 00000012  4311      ORR         R1,R2
+ 00000014  6001      STR         R1,[R0,#0x0]
+   41:  delay(500);
+ 00000016  487D      LDR         R0,=0x1F4
+ 00000018  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 0000001A  FFF2      BL          delay?T  ; T=0x0001  (2)
+   42:   while(!(AD0DR1&0X80000000));
+ 0000001C          L_120:
+ 0000001C  4800      LDR         R0,=0xE0034014
+ 0000001E  6800      LDR         R0,[R0,#0x0]
+ 00000020  4800      LDR         R1,=0x80000000
+ 00000022  4208      TST         R0,R1
+ 00000024  D0FA      BEQ         L_120  ; T=0x0000001C
+   43:  return ((AD0DR1 >> 6) & 0x03FF);
+ 00000026  4800      LDR         R0,=0xE0034014
+ 00000028  6800      LDR         R0,[R0,#0x0]
+ 0000002A  0980      LSR         R0,R0,#0x6
+ 0000002C  4800      LDR         R1,=0x3FF
+ 0000002E  4008      AND         R0,R1
+   44: }
+ 00000030  BC08      POP         {R3}
+ 00000032  4718      BX          R3
+ 00000034          ENDP ; 'as1?T'
+
+
+*** CODE SEGMENT '?PR?as2?T?project':
+   47:  AD0CR&=0XFFFFFF00;
+ 00000000  22FF      MOV         R2,#0xFF
+ 00000002  4800      LDR         R0,=0xE0034000
+ 00000004  6801      LDR         R1,[R0,#0x0]
+ 00000006  4391      BIC         R1,R2
+ 00000008  6001      STR         R1,[R0,#0x0]
+   48:  AD0CR|=0X01000004;
+ 0000000A  4800      LDR         R2,=0x1000004
+ 0000000C  4800      LDR         R0,=0xE0034000
+ 0000000E  6801      LDR         R1,[R0,#0x0]
+ 00000010  4311      ORR         R1,R2
+ 00000012  6001      STR         R1,[R0,#0x0]
+   50:  while(!(AD0DR2&0X80000000));
+ 00000014          L_125:
+ 00000014  4800      LDR         R0,=0xE0034018
+ 00000016  6800      LDR         R0,[R0,#0x0]
+ 00000018  4800      LDR         R1,=0x80000000
+ 0000001A  4208      TST         R0,R1
+ 0000001C  D0FA      BEQ         L_125  ; T=0x00000014
+   51:  return((AD0DR2 >> 6) & 0x03FF);
+ 0000001E  4800      LDR         R0,=0xE0034018
+ 00000020  6800      LDR         R0,[R0,#0x0]
+ 00000022  0980      LSR         R0,R0,#0x6
+ 00000024  4800      LDR         R1,=0x3FF
+ 00000026  4008      AND         R0,R1
+   52: }
+ 00000028  4770      BX          R14
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 30  
+
+ 0000002A          ENDP ; 'as2?T'
+
+
+*** CODE SEGMENT '?PR?as3?T?project':
+   55:  AD0CR&=0XFFFFFF00;
+ 00000000  22FF      MOV         R2,#0xFF
+ 00000002  4800      LDR         R0,=0xE0034000
+ 00000004  6801      LDR         R1,[R0,#0x0]
+ 00000006  4391      BIC         R1,R2
+ 00000008  6001      STR         R1,[R0,#0x0]
+   56:  AD0CR|=0X01000008;
+ 0000000A  4800      LDR         R2,=0x1000008
+ 0000000C  4800      LDR         R0,=0xE0034000
+ 0000000E  6801      LDR         R1,[R0,#0x0]
+ 00000010  4311      ORR         R1,R2
+ 00000012  6001      STR         R1,[R0,#0x0]
+   58:  while(!(AD0DR3&0X80000000));
+ 00000014          L_130:
+ 00000014  4800      LDR         R0,=0xE003401C
+ 00000016  6800      LDR         R0,[R0,#0x0]
+ 00000018  4800      LDR         R1,=0x80000000
+ 0000001A  4208      TST         R0,R1
+ 0000001C  D0FA      BEQ         L_130  ; T=0x00000014
+   59:  return((AD0DR3 >> 6) & 0x03FF);
+ 0000001E  4800      LDR         R0,=0xE003401C
+ 00000020  6800      LDR         R0,[R0,#0x0]
+ 00000022  0980      LSR         R0,R0,#0x6
+ 00000024  4800      LDR         R1,=0x3FF
+ 00000026  4008      AND         R0,R1
+   60: }
+ 00000028  4770      BX          R14
+ 0000002A          ENDP ; 'as3?T'
+
+
+*** CODE SEGMENT '?PR?pin?T?project':
+   65:  PINSEL0=0X00050005;//SELECTING PIN OPERATION
+ 00000000  4800      LDR         R1,=0x50005
+ 00000002  4800      LDR         R0,=0xE002C000
+ 00000004  6001      STR         R1,[R0,#0x0]
+   66:  PINSEL1=0X15000000;
+ 00000006  4800      LDR         R1,=0x15000000
+ 00000008  4800      LDR         R0,=0xE002C004
+ 0000000A  6001      STR         R1,[R0,#0x0]
+   67:  PINSEL2=0X00000000;
+ 0000000C  2100      MOV         R1,#0x0
+ 0000000E  4800      LDR         R0,=0xE002C014
+ 00000010  6001      STR         R1,[R0,#0x0]
+   68:  IODIR0=0xffffffff;
+ 00000012  4800      LDR         R1,=0xFFFFFFFF
+ 00000014  4800      LDR         R0,=0xE0028008
+ 00000016  6001      STR         R1,[R0,#0x0]
+   70:  IODIR0 &= ~(dt1|dt2|dt3|dt4);
+ 00000018  2278      MOV         R2,#0x78
+ 0000001A  4800      LDR         R0,=0xE0028008
+ 0000001C  6801      LDR         R1,[R0,#0x0]
+ 0000001E  4391      BIC         R1,R2
+ 00000020  6001      STR         R1,[R0,#0x0]
+   71:  IODIR1=0XFFFFFFFF;//PORT1 AS OUTPUT
+ 00000022  4800      LDR         R1,=0xFFFFFFFF
+ 00000024  4800      LDR         R0,=0xE0028018
+ 00000026  6001      STR         R1,[R0,#0x0]
+   72:  IOCLR1=0XFFFFFFFF;
+ 00000028  4800      LDR         R1,=0xFFFFFFFF
+ 0000002A  4800      LDR         R0,=0xE002801C
+ 0000002C  6001      STR         R1,[R0,#0x0]
+   73:  AD0CR=0X00210600;// ADC CONTROL REGISTER
+ 0000002E  4800      LDR         R1,=0x210600
+ 00000030  4800      LDR         R0,=0xE0034000
+ 00000032  6001      STR         R1,[R0,#0x0]
+   76: }
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 31  
+
+ 00000034  4770      BX          R14
+ 00000036          ENDP ; 'pin?T'
+
+
+*** CODE SEGMENT '?PR?inp0?T?project':
+   85: int inp0(int pinNumber)
+ 00000000  1C03      MOV         R3,R0 ; pinNumber
+ 00000002  ---- Variable 'pinNumber' assigned to Register 'R3' ----
+   86: {
+ 00000002            ; SCOPE-START
+   88:   int pinBlockState = IOPIN0;
+ 00000002  4800      LDR         R0,=0xE0028000
+ 00000004  6802      LDR         R2,[R0,#0x0]
+ 00000006  ---- Variable 'pinBlockState' assigned to Register 'R2' ----
+   91:   int pinState = (pinBlockState & (/*1 <<*/ pinNumber)) ? 1 : 0;
+ 00000006  1C19      MOV         R1,R3 ; pinNumber
+ 00000008  1C10      MOV         R0,R2 ; pinBlockState
+ 0000000A  4008      AND         R0,R1 ; pinNumber
+ 0000000C  2800      CMP         R0,#0x0
+ 0000000E  D001      BEQ         L_135  ; T=0x00000014
+ 00000010  2101      MOV         R1,#0x1
+ 00000012  E000      B           L_136  ; T=0x00000016
+ 00000014          L_135:
+ 00000014  2100      MOV         R1,#0x0
+ 00000016          L_136:
+ 00000016  ---- Variable 'pinState' assigned to Register 'R1' ----
+   94:   return pinState;
+ 00000016  1C08      MOV         R0,R1 ; pinState
+ 00000018            ; SCOPE-END
+   95: }
+ 00000018  4770      BX          R14
+ 0000001A          ENDP ; 'inp0?T'
+
+
+*** CODE SEGMENT '?PR?InitSerial0Int?T?project':
+   96: void InitSerial0Int(unsigned isrPtr)
+ 00000000  ---- Variable 'isrPtr' assigned to Register 'R0' ----
+   98:   U0IER = 0x01;
+ 00000000  2201      MOV         R2,#0x1
+ 00000002  4800      LDR         R1,=0xE000C004
+ 00000004  600A      STR         R2,[R1,#0x0]
+   99:   VICVectCntl0  = 0x00000026;                       //select a priority slot for a given interrupt  
+ 00000006  2226      MOV         R2,#0x26
+ 00000008  4800      LDR         R1,=0xFFFFF200
+ 0000000A  600A      STR         R2,[R1,#0x0]
+  100:   VICVectAddr0  = (unsigned long)isrPtr;        //pass the address of the IRQ into the VIC slot 
+ 0000000C  1C01      MOV         R1,R0 ; isrPtr
+ 0000000E  4800      LDR         R0,=0xFFFFF100
+ 00000010  6001      STR         R1,[R0,#0x0]
+  101:   VICIntEnable  |= 0x00000040;                      //enable interrupt2
+ 00000012  2240      MOV         R2,#0x40
+ 00000014  4800      LDR         R0,=0xFFFFF010
+ 00000016  6801      LDR         R1,[R0,#0x0]
+ 00000018  4311      ORR         R1,R2
+ 0000001A  6001      STR         R1,[R0,#0x0]
+  102: }
+ 0000001C  4770      BX          R14
+ 0000001E          ENDP ; 'InitSerial0Int?T'
+
+
+*** CODE SEGMENT '?PR?chkok?T?project':
+  106: unsigned char chkok()
+ 00000000  B500      PUSH        {LR}
+  107: {
+ 00000002            ; SCOPE-START
+  110:  do{
+ 00000002          L_138:
+  111:     rt = receive_0();
+ 00000002  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 00000004  FFFD      BL          receive_0?T  ; T=0x0001  (2)
+ 00000006  1C02      MOV         R2,R0 ; rt
+ 00000008  ---- Variable 'rt' assigned to Register 'R2' ----
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 32  
+
+  112:     if(rt == 'E')
+ 00000008  1C10      MOV         R0,R2 ; rt
+ 0000000A  0600      LSL         R0,R0,#0x18 ; rt
+ 0000000C  0E00      LSR         R0,R0,#0x18
+ 0000000E  2845      CMP         R0,#0x45
+ 00000010  D101      BNE         L_140  ; T=0x00000016
+  114:             rt='E';
+ 00000012  2245      MOV         R2,#0x45
+  115:          break;
+ 00000014  E001      B           L_141  ; T=0x0000001A
+  117:    }while(rt != 'K');
+ 00000016          L_140:
+ 00000016  284B      CMP         R0,#0x4B
+ 00000018  D1F3      BNE         L_138  ; T=0x00000002
+ 0000001A          L_141:
+  119:    return rt;
+ 0000001A  1C10      MOV         R0,R2 ; rt
+ 0000001C  0600      LSL         R0,R0,#0x18 ; rt
+ 0000001E  0E00      LSR         R0,R0,#0x18
+ 00000020            ; SCOPE-END
+  120: }
+ 00000020  BC08      POP         {R3}
+ 00000022  4718      BX          R3
+ 00000024          ENDP ; 'chkok?T'
+
+
+*** CODE SEGMENT '?PR?okcheck?T?project':
+  217: void okcheck()
+ 00000000  B500      PUSH        {LR}
+  218: {
+ 00000002            ; SCOPE-START
+  220:  do{
+ 00000002          L_144:
+  221:      rr = receive_0();
+ 00000002  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 00000004  FFFD      BL          receive_0?T  ; T=0x0001  (2)
+ 00000006  1C02      MOV         R2,R0 ; rr
+ 00000008  ---- Variable 'rr' assigned to Register 'R2' ----
+  222:    }while(rr != 'K');
+ 00000008  1C10      MOV         R0,R2 ; rr
+ 0000000A  0600      LSL         R0,R0,#0x18 ; rr
+ 0000000C  0E00      LSR         R0,R0,#0x18
+ 0000000E  284B      CMP         R0,#0x4B
+ 00000010  D1F7      BNE         L_144  ; T=0x00000002
+ 00000012            ; SCOPE-END
+  223: }
+ 00000012  BC08      POP         {R3}
+ 00000014  4718      BX          R3
+ 00000016          ENDP ; 'okcheck?T'
+
+
+*** CODE SEGMENT '?PR?gprs?T?project':
+  225: void gprs()
+ 00000000  B500      PUSH        {LR}
+  230:       string_0("AT\r\n");
+ 00000002  4800      LDR         R0,=??S_1 ; ??S_1
+ 00000004  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000006  FFFC      BL          string_0?T  ; T=0x0001  (2)
+  231:        okcheck(); clcd(1); stringlcd(0x80,"AT");
+ 00000008  F7FF      BL          okcheck?T  ; T=0x0001  (1)
+ 0000000A  FFFA      BL          okcheck?T  ; T=0x0001  (2)
+ 0000000C  2001      MOV         R0,#0x1
+ 0000000E  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000010  FFF7      BL          clcd?T  ; T=0x0001  (2)
+ 00000012  4800      LDR         R1,=??S_2 ; ??S_2
+ 00000014  2080      MOV         R0,#0x80
+ 00000016  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000018  FFF3      BL          stringlcd?T  ; T=0x0001  (2)
+  233:           delay(400);
+ 0000001A  4864      LDR         R0,=0x190
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 33  
+
+ 0000001C  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 0000001E  FFF0      BL          delay?T  ; T=0x0001  (2)
+  243:         string_0("AT+CSTT=\"AIRTELGPRS.COM\",\",\"\r\n");   //rcomnet
+ 00000020  4800      LDR         R0,=??S_3 ; ??S_3
+ 00000022  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000024  FFED      BL          string_0?T  ; T=0x0001  (2)
+  244:         okcheck(); clcd(1);  stringlcd(0x80,"airtelgprs.com");
+ 00000026  F7FF      BL          okcheck?T  ; T=0x0001  (1)
+ 00000028  FFEB      BL          okcheck?T  ; T=0x0001  (2)
+ 0000002A  2001      MOV         R0,#0x1
+ 0000002C  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          clcd?T  ; T=0x0001  (2)
+ 00000030  4800      LDR         R1,=??S_4 ; ??S_4
+ 00000032  2080      MOV         R0,#0x80
+ 00000034  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000036  FFE4      BL          stringlcd?T  ; T=0x0001  (2)
+  247:         string_0("AT+CGATT=1\r\n");
+ 00000038  4800      LDR         R0,=??S_5 ; ??S_5
+ 0000003A  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000003C  FFE1      BL          string_0?T  ; T=0x0001  (2)
+  248:         okcheck(); clcd(1);  stringlcd(0x80,"AT+CGATT=1");
+ 0000003E  F7FF      BL          okcheck?T  ; T=0x0001  (1)
+ 00000040  FFDF      BL          okcheck?T  ; T=0x0001  (2)
+ 00000042  2001      MOV         R0,#0x1
+ 00000044  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000046  FFDC      BL          clcd?T  ; T=0x0001  (2)
+ 00000048  4800      LDR         R1,=??S_6 ; ??S_6
+ 0000004A  2080      MOV         R0,#0x80
+ 0000004C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000004E  FFD8      BL          stringlcd?T  ; T=0x0001  (2)
+  249:         delay(650);  
+ 00000050  4800      LDR         R0,=0x28A
+ 00000052  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000054  FFD5      BL          delay?T  ; T=0x0001  (2)
+  252:         string_0("AT+CIICR\r\n");
+ 00000056  4800      LDR         R0,=??S_7 ; ??S_7
+ 00000058  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000005A  FFD2      BL          string_0?T  ; T=0x0001  (2)
+  253:         okcheck();clcd(1);   stringlcd(0x80,"AT+CIICR");
+ 0000005C  F7FF      BL          okcheck?T  ; T=0x0001  (1)
+ 0000005E  FFD0      BL          okcheck?T  ; T=0x0001  (2)
+ 00000060  2001      MOV         R0,#0x1
+ 00000062  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000064  FFCD      BL          clcd?T  ; T=0x0001  (2)
+ 00000066  4800      LDR         R1,=??S_8 ; ??S_8
+ 00000068  2080      MOV         R0,#0x80
+ 0000006A  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000006C  FFC9      BL          stringlcd?T  ; T=0x0001  (2)
+  255:           delay(500);
+ 0000006E  487D      LDR         R0,=0x1F4
+ 00000070  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000072  FFC6      BL          delay?T  ; T=0x0001  (2)
+  258:        string_0("AT+CIFSR\r\n");
+ 00000074  4800      LDR         R0,=??S_9 ; ??S_9
+ 00000076  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000078  FFC3      BL          string_0?T  ; T=0x0001  (2)
+  259:        delay(1500);
+ 0000007A  4800      LDR         R0,=0x5DC
+ 0000007C  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 0000007E  FFC0      BL          delay?T  ; T=0x0001  (2)
+  260:        delay(1000);
+ 00000080  48FA      LDR         R0,=0x3E8
+ 00000082  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000084  FFBD      BL          delay?T  ; T=0x0001  (2)
+  261:        clcd(1);  
+ 00000086  2001      MOV         R0,#0x1
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 34  
+
+ 00000088  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000008A  FFBA      BL          clcd?T  ; T=0x0001  (2)
+  262:        stringlcd(0x80,"AT+CIFSR*");
+ 0000008C  4800      LDR         R1,=??S_10 ; ??S_10
+ 0000008E  2080      MOV         R0,#0x80
+ 00000090  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000092  FFB6      BL          stringlcd?T  ; T=0x0001  (2)
+  263: }
+ 00000094  BC08      POP         {R3}
+ 00000096  4718      BX          R3
+ 00000098          ENDP ; 'gprs?T'
+
+
+*** CODE SEGMENT '?PR?gprsstop?T?project':
+  266: void gprsstop()
+ 00000000  B510      PUSH        {R4,LR}
+  267:  {
+ 00000002            ; SCOPE-START
+  269:   string_0("AT+CIPCLOSE\r\n");
+ 00000002  4800      LDR         R0,=??S_11 ; ??S_11
+ 00000004  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000006  FFFC      BL          string_0?T  ; T=0x0001  (2)
+  270:          do{
+ 00000008          L_148:
+  271:              rx=receive_0();
+ 00000008  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 0000000A  FFFA      BL          receive_0?T  ; T=0x0001  (2)
+ 0000000C  1C04      MOV         R4,R0 ; rx
+ 0000000E  ---- Variable 'rx' assigned to Register 'R4' ----
+  272:            }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPCLOSE");
+ 0000000E  1C20      MOV         R0,R4 ; rx
+ 00000010  0600      LSL         R0,R0,#0x18 ; rx
+ 00000012  0E00      LSR         R0,R0,#0x18
+ 00000014  284B      CMP         R0,#0x4B
+ 00000016  D1F7      BNE         L_148  ; T=0x00000008
+ 00000018  2001      MOV         R0,#0x1
+ 0000001A  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000001C  FFF1      BL          clcd?T  ; T=0x0001  (2)
+ 0000001E  4800      LDR         R1,=??S_12 ; ??S_12
+ 00000020  2080      MOV         R0,#0x80
+ 00000022  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000024  FFED      BL          stringlcd?T  ; T=0x0001  (2)
+  273:            delay(600);
+ 00000026  4896      LDR         R0,=0x258
+ 00000028  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 0000002A  FFEA      BL          delay?T  ; T=0x0001  (2)
+  274:   string_0("AT+CIPSHUT\r\n");
+ 0000002C  4800      LDR         R0,=??S_13 ; ??S_13
+ 0000002E  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000030  FFE7      BL          string_0?T  ; T=0x0001  (2)
+  275:          do{
+ 00000032          L_152:
+  276:              rx=receive_0();
+ 00000032  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 00000034  FFE5      BL          receive_0?T  ; T=0x0001  (2)
+ 00000036  1C04      MOV         R4,R0 ; rx
+  277:            }while(rx != 'K');clcd(1);stringlcd(0x80,"AT+CIPSHUT");
+ 00000038  0600      LSL         R0,R0,#0x18 ; rx
+ 0000003A  0E00      LSR         R0,R0,#0x18
+ 0000003C  284B      CMP         R0,#0x4B
+ 0000003E  D1F8      BNE         L_152  ; T=0x00000032
+ 00000040  2001      MOV         R0,#0x1
+ 00000042  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000044  FFDD      BL          clcd?T  ; T=0x0001  (2)
+ 00000046  4800      LDR         R1,=??S_14 ; ??S_14
+ 00000048  2080      MOV         R0,#0x80
+ 0000004A  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000004C  FFD9      BL          stringlcd?T  ; T=0x0001  (2)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 35  
+
+ 0000004E            ; SCOPE-END
+  278:  }
+ 0000004E  BC10      POP         {R4}
+ 00000050  BC08      POP         {R3}
+ 00000052  4718      BX          R3
+ 00000054          ENDP ; 'gprsstop?T'
+
+
+*** CODE SEGMENT '?PR?gprsstart?T?project':
+  280: void gprsstart()
+ 00000000  B530      PUSH        {R4-R5,LR}
+ 00000002  ---- Variable 'rx' assigned to Register 'R4' ----
+  281:  {
+ 00000002            ; SCOPE-START
+  286: lp:     delay(600);
+ 00000002          lp:
+ 00000002  4896      LDR         R0,=0x258
+ 00000004  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000006  FFFC      BL          delay?T  ; T=0x0001  (2)
+  287:      string_0("AT+CIPSTART=\"TCP\",\"www.gprsserver.in\",\"80\"\r\n");  
+ 00000008  4800      LDR         R0,=??S_15 ; ??S_15
+ 0000000A  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000000C  FFF9      BL          string_0?T  ; T=0x0001  (2)
+  288:       do{
+ 0000000E          L_157:
+  289:              rx=receive_0();
+ 0000000E  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 00000010  FFF7      BL          receive_0?T  ; T=0x0001  (2)
+ 00000012  1C04      MOV         R4,R0 ; rx
+  290:            }while(rx != 'K');
+ 00000014  0600      LSL         R0,R0,#0x18 ; rx
+ 00000016  0E00      LSR         R0,R0,#0x18
+ 00000018  284B      CMP         R0,#0x4B
+ 0000001A  D1F8      BNE         L_157  ; T=0x0000000E
+  292:             do{
+ 0000001C          L_161:
+  293:                rx=receive_0();
+ 0000001C  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 0000001E  FFF0      BL          receive_0?T  ; T=0x0001  (2)
+ 00000020  1C04      MOV         R4,R0 ; rx
+  294:                 if(rx == 'F')
+ 00000022  0605      LSL         R5,R0,#0x18 ; rx
+ 00000024  0E2D      LSR         R5,R5,#0x18
+ 00000026  2D46      CMP         R5,#0x46
+ 00000028  D102      BNE         L_163  ; T=0x00000030
+  296:                      gprsstop();goto lp;
+ 0000002A  F7FF      BL          gprsstop?T  ; T=0x0001  (1)
+ 0000002C  FFE9      BL          gprsstop?T  ; T=0x0001  (2)
+ 0000002E  E7E6      B           lp  ; T=0xFFFFFFFE
+  298:               }while(rx != 'K');       
+ 00000030          L_163:
+ 00000030  2D4B      CMP         R5,#0x4B
+ 00000032  D1F3      BNE         L_161  ; T=0x0000001C
+  300:      delay(600);
+ 00000034  4896      LDR         R0,=0x258
+ 00000036  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000038  FFE3      BL          delay?T  ; T=0x0001  (2)
+  302:             string_0("AT+CIPSEND\r\n");
+ 0000003A  4800      LDR         R0,=??S_16 ; ??S_16
+ 0000003C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000003E  FFE0      BL          string_0?T  ; T=0x0001  (2)
+  303:               do{
+ 00000040          L_166:
+  304:                rx=receive_0();
+ 00000040  F7FF      BL          receive_0?T  ; T=0x0001  (1)
+ 00000042  FFDE      BL          receive_0?T  ; T=0x0001  (2)
+ 00000044  1C04      MOV         R4,R0 ; rx
+  305:               }while(rx != '>');
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 36  
+
+ 00000046  0600      LSL         R0,R0,#0x18 ; rx
+ 00000048  0E00      LSR         R0,R0,#0x18
+ 0000004A  283E      CMP         R0,#0x3E
+ 0000004C  D1F8      BNE         L_166  ; T=0x00000040
+ 0000004E            ; SCOPE-END
+  306:  }
+ 0000004E  BC30      POP         {R4-R5}
+ 00000050  BC08      POP         {R3}
+ 00000052  4718      BX          R3
+ 00000054          ENDP ; 'gprsstart?T'
+
+
+*** CODE SEGMENT '?PR?gprs_vts_send?T?project':
+  312: void gprs_vts_send(unsigned char *lat,unsigned char *lon,unsigned char *di1,unsigned char *di2,unsigned int ai1,u
+             -nsigned int ai2,unsigned char *dev_name)
+ 00000000  B5F0      PUSH        {R4-R7,LR}
+ 00000002  1C1C      MOV         R4,R3 ; di2
+ 00000004  ---- Variable 'di2' assigned to Register 'R4' ----
+ 00000004  1C15      MOV         R5,R2 ; di1
+ 00000006  ---- Variable 'di1' assigned to Register 'R5' ----
+ 00000006  1C0E      MOV         R6,R1 ; lon
+ 00000008  ---- Variable 'lon' assigned to Register 'R6' ----
+ 00000008  1C07      MOV         R7,R0 ; lat
+ 0000000A  ---- Variable 'lat' assigned to Register 'R7' ----
+ 0000000A  B084      SUB         R13,#0x10
+  313: {
+ 0000000C            ; SCOPE-START
+  315:  unsigned char buf[4]={0x0d,0x0a,0x1a,0x00};
+ 0000000C  4800      LDR         R1,=?tpl?0001 ; ?tpl?0001
+ 0000000E  A803      ADD         R0,R13,#0xC
+ 00000010  2204      MOV         R2,#0x4
+ 00000012          L_207:
+ 00000012  780B      LDRB        R3,[R1,#0x0]
+ 00000014  7003      STRB        R3,[R0,#0x0]
+ 00000016  1C49      ADD         R1,R1,#0x1
+ 00000018  1C40      ADD         R0,R0,#0x1
+ 0000001A  1E52      SUB         R2,R2,#0x1
+ 0000001C  D1F9      BNE         L_207  ; T=0x00000012
+  317:  string_0("GET /portvts.php?");
+ 0000001E  4800      LDR         R0,=??S_17 ; ??S_17
+ 00000020  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000022  FFEE      BL          string_0?T  ; T=0x0001  (2)
+  320:  string_0("a=");  string_0(lat);
+ 00000024  4800      LDR         R0,=??S_18 ; ??S_18
+ 00000026  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000028  FFEB      BL          string_0?T  ; T=0x0001  (2)
+ 0000002A  1C38      MOV         R0,R7 ; lat
+ 0000002C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          string_0?T  ; T=0x0001  (2)
+  321:  string_0("&b="); string_0(lon);
+ 00000030  4800      LDR         R0,=??S_19 ; ??S_19
+ 00000032  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000034  FFE5      BL          string_0?T  ; T=0x0001  (2)
+ 00000036  1C30      MOV         R0,R6 ; lon
+ 00000038  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000003A  FFE2      BL          string_0?T  ; T=0x0001  (2)
+  323:  string_0("&c="); string_0(dev_name);
+ 0000003C  4800      LDR         R0,=??S_20 ; ??S_20
+ 0000003E  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000040  FFDF      BL          string_0?T  ; T=0x0001  (2)
+ 00000042  9806      LDR         R0,[R13,#0x18] ; dev_name
+ 00000044  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000046  FFDC      BL          string_0?T  ; T=0x0001  (2)
+  324:  string_0("&d="); string_0("vts");
+ 00000048  4800      LDR         R0,=??S_21 ; ??S_21
+ 0000004A  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000004C  FFD9      BL          string_0?T  ; T=0x0001  (2)
+ 0000004E  4800      LDR         R0,=??S_22 ; ??S_22
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 37  
+
+ 00000050  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000052  FFD6      BL          string_0?T  ; T=0x0001  (2)
+  327:  string_0("&e="); string_0(di1);
+ 00000054  4800      LDR         R0,=??S_23 ; ??S_23
+ 00000056  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000058  FFD3      BL          string_0?T  ; T=0x0001  (2)
+ 0000005A  1C28      MOV         R0,R5 ; di1
+ 0000005C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000005E  FFD0      BL          string_0?T  ; T=0x0001  (2)
+  329:  string_0("&f="); string_0(di2);
+ 00000060  4800      LDR         R0,=??S_24 ; ??S_24
+ 00000062  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000064  FFCD      BL          string_0?T  ; T=0x0001  (2)
+ 00000066  1C20      MOV         R0,R4 ; di2
+ 00000068  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000006A  FFCA      BL          string_0?T  ; T=0x0001  (2)
+  332:   sprintf(tbuf,"%u",ai1);
+ 0000006C  A800      ADD         R0,R13,#0x0
+ 0000006E  4800      LDR         R1,=??S_25 ; ??S_25
+ 00000070  9A04      LDR         R2,[R13,#0x10] ; ai1
+ 00000072  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 00000074  FFC5      BL          sprintf?T  ; T=0x0001  (2)
+  333:     string_0("&g="); string_0(tbuf);
+ 00000076  4800      LDR         R0,=??S_26 ; ??S_26
+ 00000078  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000007A  FFC2      BL          string_0?T  ; T=0x0001  (2)
+ 0000007C  AC00      ADD         R4,R13,#0x0
+ 0000007E  1C20      MOV         R0,R4
+ 00000080  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000082  FFBE      BL          string_0?T  ; T=0x0001  (2)
+  335:   sprintf(tbuf,"%u",ai2);
+ 00000084  1C20      MOV         R0,R4
+ 00000086  4800      LDR         R1,=??S_25 ; ??S_25
+ 00000088  9A05      LDR         R2,[R13,#0x14] ; ai2
+ 0000008A  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 0000008C  FFB9      BL          sprintf?T  ; T=0x0001  (2)
+  336:     string_0("&h="); string_0(tbuf);
+ 0000008E  4800      LDR         R0,=??S_27 ; ??S_27
+ 00000090  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000092  FFB6      BL          string_0?T  ; T=0x0001  (2)
+ 00000094  A800      ADD         R0,R13,#0x0
+ 00000096  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000098  FFB3      BL          string_0?T  ; T=0x0001  (2)
+  338:     string_0("&i="); string_0("- HTTP/1.1\r\n");
+ 0000009A  4800      LDR         R0,=??S_28 ; ??S_28
+ 0000009C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000009E  FFB0      BL          string_0?T  ; T=0x0001  (2)
+ 000000A0  4800      LDR         R0,=??S_29 ; ??S_29
+ 000000A2  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000A4  FFAD      BL          string_0?T  ; T=0x0001  (2)
+  340:    string_0("Host: www.gprsserver.in\r\n");
+ 000000A6  4800      LDR         R0,=??S_30 ; ??S_30
+ 000000A8  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000AA  FFAA      BL          string_0?T  ; T=0x0001  (2)
+  341:    string_0(buf);
+ 000000AC  A803      ADD         R0,R13,#0xC
+ 000000AE  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000B0  FFA7      BL          string_0?T  ; T=0x0001  (2)
+ 000000B2            ; SCOPE-END
+  343: }  
+ 000000B2  B004      ADD         R13,#0x10
+ 000000B4  BCF0      POP         {R4-R7}
+ 000000B6  BC08      POP         {R3}
+ 000000B8  4718      BX          R3
+ 000000BA          ENDP ; 'gprs_vts_send?T'
+
+
+*** CODE SEGMENT '?PR?gprs_logger_send?T?project':
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 38  
+
+  345: void gprs_logger_send(unsigned char *s1,unsigned int si1,unsigned char *s2,unsigned int si2,unsigned char *s3,uns
+             -igned int si3,unsigned char *s4,unsigned int si4,unsigned char *s5,unsigned int si5,unsigned char *dev_name)
+ 00000000  B5F0      PUSH        {R4-R7,LR}
+ 00000002  1C1C      MOV         R4,R3 ; si2
+ 00000004  ---- Variable 'si2' assigned to Register 'R4' ----
+ 00000004  1C15      MOV         R5,R2 ; s2
+ 00000006  ---- Variable 's2' assigned to Register 'R5' ----
+ 00000006  1C0E      MOV         R6,R1 ; si1
+ 00000008  ---- Variable 'si1' assigned to Register 'R6' ----
+ 00000008  1C07      MOV         R7,R0 ; s1
+ 0000000A  ---- Variable 's1' assigned to Register 'R7' ----
+ 0000000A  B084      SUB         R13,#0x10
+  346: {
+ 0000000C            ; SCOPE-START
+  348:   unsigned char buf[4]={0x0d,0x0a,0x1a,0x00}; 
+ 0000000C  4800      LDR         R1,=?tpl?0002 ; ?tpl?0002
+ 0000000E  A803      ADD         R0,R13,#0xC
+ 00000010  2204      MOV         R2,#0x4
+ 00000012          L_209:
+ 00000012  780B      LDRB        R3,[R1,#0x0]
+ 00000014  7003      STRB        R3,[R0,#0x0]
+ 00000016  1C49      ADD         R1,R1,#0x1
+ 00000018  1C40      ADD         R0,R0,#0x1
+ 0000001A  1E52      SUB         R2,R2,#0x1
+ 0000001C  D1F9      BNE         L_209  ; T=0x00000012
+  350:  string_0("GET /portlogger.php?");
+ 0000001E  4800      LDR         R0,=??S_31 ; ??S_31
+ 00000020  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000022  FFEE      BL          string_0?T  ; T=0x0001  (2)
+  352:  string_0("a=");string_0(s1);
+ 00000024  4800      LDR         R0,=??S_18 ; ??S_18
+ 00000026  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000028  FFEB      BL          string_0?T  ; T=0x0001  (2)
+ 0000002A  1C38      MOV         R0,R7 ; s1
+ 0000002C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          string_0?T  ; T=0x0001  (2)
+  353:  sprintf(tbuf,"%u",si1);
+ 00000030  A800      ADD         R0,R13,#0x0
+ 00000032  4800      LDR         R1,=??S_25 ; ??S_25
+ 00000034  1C32      MOV         R2,R6 ; si1
+ 00000036  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 00000038  FFE3      BL          sprintf?T  ; T=0x0001  (2)
+  354:  string_0("&b=");string_0(tbuf);
+ 0000003A  4800      LDR         R0,=??S_19 ; ??S_19
+ 0000003C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000003E  FFE0      BL          string_0?T  ; T=0x0001  (2)
+ 00000040  A800      ADD         R0,R13,#0x0
+ 00000042  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000044  FFDD      BL          string_0?T  ; T=0x0001  (2)
+  356:  string_0("&c=");string_0(s2);
+ 00000046  4800      LDR         R0,=??S_20 ; ??S_20
+ 00000048  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000004A  FFDA      BL          string_0?T  ; T=0x0001  (2)
+ 0000004C  1C28      MOV         R0,R5 ; s2
+ 0000004E  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000050  FFD7      BL          string_0?T  ; T=0x0001  (2)
+  357:  sprintf(tbuf,"%u",si2);
+ 00000052  A800      ADD         R0,R13,#0x0
+ 00000054  4800      LDR         R1,=??S_25 ; ??S_25
+ 00000056  1C22      MOV         R2,R4 ; si2
+ 00000058  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 0000005A  FFD2      BL          sprintf?T  ; T=0x0001  (2)
+  358:  string_0("&d=");string_0(tbuf);
+ 0000005C  4800      LDR         R0,=??S_21 ; ??S_21
+ 0000005E  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000060  FFCF      BL          string_0?T  ; T=0x0001  (2)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 39  
+
+ 00000062  A800      ADD         R0,R13,#0x0
+ 00000064  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000066  FFCC      BL          string_0?T  ; T=0x0001  (2)
+  360:  string_0("&e=");string_0(s3);
+ 00000068  4800      LDR         R0,=??S_23 ; ??S_23
+ 0000006A  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000006C  FFC9      BL          string_0?T  ; T=0x0001  (2)
+ 0000006E  9804      LDR         R0,[R13,#0x10] ; s3
+ 00000070  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000072  FFC6      BL          string_0?T  ; T=0x0001  (2)
+  361:  sprintf(tbuf,"%u",si3);
+ 00000074  A800      ADD         R0,R13,#0x0
+ 00000076  4800      LDR         R1,=??S_25 ; ??S_25
+ 00000078  9A05      LDR         R2,[R13,#0x14] ; si3
+ 0000007A  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 0000007C  FFC1      BL          sprintf?T  ; T=0x0001  (2)
+  362:  string_0("&f=");string_0(tbuf);
+ 0000007E  4800      LDR         R0,=??S_24 ; ??S_24
+ 00000080  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000082  FFBE      BL          string_0?T  ; T=0x0001  (2)
+ 00000084  A800      ADD         R0,R13,#0x0
+ 00000086  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000088  FFBB      BL          string_0?T  ; T=0x0001  (2)
+  364:  string_0("&g=");string_0(s4);
+ 0000008A  4800      LDR         R0,=??S_26 ; ??S_26
+ 0000008C  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 0000008E  FFB8      BL          string_0?T  ; T=0x0001  (2)
+ 00000090  9806      LDR         R0,[R13,#0x18] ; s4
+ 00000092  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 00000094  FFB5      BL          string_0?T  ; T=0x0001  (2)
+  365:  sprintf(tbuf,"%u",si4);
+ 00000096  A800      ADD         R0,R13,#0x0
+ 00000098  4800      LDR         R1,=??S_25 ; ??S_25
+ 0000009A  9A07      LDR         R2,[R13,#0x1C] ; si4
+ 0000009C  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 0000009E  FFB0      BL          sprintf?T  ; T=0x0001  (2)
+  366:  string_0("&h=");string_0(tbuf);
+ 000000A0  4800      LDR         R0,=??S_27 ; ??S_27
+ 000000A2  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000A4  FFAD      BL          string_0?T  ; T=0x0001  (2)
+ 000000A6  A800      ADD         R0,R13,#0x0
+ 000000A8  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000AA  FFAA      BL          string_0?T  ; T=0x0001  (2)
+  368:  string_0("&i=");string_0(s5);
+ 000000AC  4800      LDR         R0,=??S_28 ; ??S_28
+ 000000AE  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000B0  FFA7      BL          string_0?T  ; T=0x0001  (2)
+ 000000B2  9808      LDR         R0,[R13,#0x20] ; s5
+ 000000B4  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000B6  FFA4      BL          string_0?T  ; T=0x0001  (2)
+  369:  sprintf(tbuf,"%u",si5);
+ 000000B8  A800      ADD         R0,R13,#0x0
+ 000000BA  4800      LDR         R1,=??S_25 ; ??S_25
+ 000000BC  9A09      LDR         R2,[R13,#0x24] ; si5
+ 000000BE  F7FF      BL          sprintf?T  ; T=0x0001  (1)
+ 000000C0  FF9F      BL          sprintf?T  ; T=0x0001  (2)
+  370:  string_0("&j=");string_0(tbuf);
+ 000000C2  4800      LDR         R0,=??S_32 ; ??S_32
+ 000000C4  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000C6  FF9C      BL          string_0?T  ; T=0x0001  (2)
+ 000000C8  A800      ADD         R0,R13,#0x0
+ 000000CA  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000CC  FF99      BL          string_0?T  ; T=0x0001  (2)
+  373:  string_0("&k=");string_0(dev_name);
+ 000000CE  4800      LDR         R0,=??S_33 ; ??S_33
+ 000000D0  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 40  
+
+ 000000D2  FF96      BL          string_0?T  ; T=0x0001  (2)
+ 000000D4  980A      LDR         R0,[R13,#0x28] ; dev_name
+ 000000D6  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000D8  FF93      BL          string_0?T  ; T=0x0001  (2)
+  374:  string_0("&l=");string_0("logger");
+ 000000DA  4800      LDR         R0,=??S_34 ; ??S_34
+ 000000DC  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000DE  FF90      BL          string_0?T  ; T=0x0001  (2)
+ 000000E0  4800      LDR         R0,=??S_35 ; ??S_35
+ 000000E2  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000E4  FF8D      BL          string_0?T  ; T=0x0001  (2)
+  376:  string_0(" HTTP/1.1 \r\n");
+ 000000E6  4800      LDR         R0,=??S_36 ; ??S_36
+ 000000E8  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000EA  FF8A      BL          string_0?T  ; T=0x0001  (2)
+  378:  string_0("Host: www.gprsserver.in\r\n");
+ 000000EC  4800      LDR         R0,=??S_30 ; ??S_30
+ 000000EE  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000F0  FF87      BL          string_0?T  ; T=0x0001  (2)
+  379:  string_0(buf);
+ 000000F2  A803      ADD         R0,R13,#0xC
+ 000000F4  F7FF      BL          string_0?T  ; T=0x0001  (1)
+ 000000F6  FF84      BL          string_0?T  ; T=0x0001  (2)
+ 000000F8            ; SCOPE-END
+  381: }
+ 000000F8  B004      ADD         R13,#0x10
+ 000000FA  BCF0      POP         {R4-R7}
+ 000000FC  BC08      POP         {R3}
+ 000000FE  4718      BX          R3
+ 00000100          ENDP ; 'gprs_logger_send?T'
+
+
+*** CODE SEGMENT '?PR?gps?T?project':
+  388: void gps()
+ 00000000  B500      PUSH        {LR}
+  390:     while(receive_1()!='C');
+ 00000002          L_170:
+ 00000002  F7FF      BL          receive_1?T  ; T=0x0001  (1)
+ 00000004  FFFD      BL          receive_1?T  ; T=0x0001  (2)
+ 00000006  0600      LSL         R0,R0,#0x18 ; receive_1?T
+ 00000008  0E00      LSR         R0,R0,#0x18
+ 0000000A  2843      CMP         R0,#0x43
+ 0000000C  D1F9      BNE         L_170  ; T=0x00000002
+  391:         for(count=0;count<14;count++)
+ 0000000E  2100      MOV         R1,#0x0
+ 00000010  4800      LDR         R0,=count ; count
+ 00000012  7001      STRB        R1,[R0,#0x0] ; count
+ 00000014  E005      B           L_176  ; T=0x00000022
+ 00000016          L_177:
+  393:         receive_1();
+ 00000016  F7FF      BL          receive_1?T  ; T=0x0001  (1)
+ 00000018  FFF3      BL          receive_1?T  ; T=0x0001  (2)
+  394:         }
+ 0000001A  4800      LDR         R0,=count ; count
+ 0000001C  7801      LDRB        R1,[R0,#0x0] ; count
+ 0000001E  3101      ADD         R1,#0x1
+ 00000020  7001      STRB        R1,[R0,#0x0] ; count
+ 00000022          L_176:
+ 00000022  4800      LDR         R0,=count ; count
+ 00000024  7800      LDRB        R0,[R0,#0x0] ; count
+ 00000026  280E      CMP         R0,#0xE
+ 00000028  DBF5      BLT         L_177  ; T=0x00000016
+  395:         for(count=0;count<24;count++)
+ 0000002A  2100      MOV         R1,#0x0
+ 0000002C  4800      LDR         R0,=count ; count
+ 0000002E  7001      STRB        R1,[R0,#0x0] ; count
+ 00000030  E009      B           L_181  ; T=0x00000046
+ 00000032          L_182:
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 41  
+
+  397:         gps_location[count]=receive_1();
+ 00000032  F7FF      BL          receive_1?T  ; T=0x0001  (1)
+ 00000034  FFE5      BL          receive_1?T  ; T=0x0001  (2)
+ 00000036  4800      LDR         R1,=count ; count
+ 00000038  7809      LDRB        R1,[R1,#0x0] ; count
+ 0000003A  1C0B      MOV         R3,R1
+ 0000003C  4800      LDR         R2,=gps_location ; gps_location
+ 0000003E  54D0      STRB        R0,[R2,R3]
+  398:         }
+ 00000040  4800      LDR         R0,=count ; count
+ 00000042  3101      ADD         R1,#0x1
+ 00000044  7001      STRB        R1,[R0,#0x0] ; count
+ 00000046          L_181:
+ 00000046  4800      LDR         R0,=count ; count
+ 00000048  7800      LDRB        R0,[R0,#0x0] ; count
+ 0000004A  2818      CMP         R0,#0x18
+ 0000004C  DBF1      BLT         L_182  ; T=0x00000032
+  399: }
+ 0000004E  BC08      POP         {R3}
+ 00000050  4718      BX          R3
+ 00000052          ENDP ; 'gps?T'
+
+
+*** CODE SEGMENT '?PR?lcdbasic?T?project':
+  402: void lcdbasic()
+ 00000000  B500      PUSH        {LR}
+  404:      clcd(1);
+ 00000002  2001      MOV         R0,#0x1
+ 00000004  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 00000006  FFFC      BL          clcd?T  ; T=0x0001  (2)
+  405:     stringlcd(0x80,"HB:");//0x83,4,5
+ 00000008  4800      LDR         R1,=??S_37 ; ??S_37
+ 0000000A  2080      MOV         R0,#0x80
+ 0000000C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000000E  FFF8      BL          stringlcd?T  ; T=0x0001  (2)
+  406:     stringlcd(0x88,"T:"); //0x8A,9,a
+ 00000010  4800      LDR         R1,=??S_38 ; ??S_38
+ 00000012  2088      MOV         R0,#0x88
+ 00000014  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000016  FFF4      BL          stringlcd?T  ; T=0x0001  (2)
+  407:     stringlcd(0xc0,"M:"); //0xc2,3,4
+ 00000018  4800      LDR         R1,=??S_39 ; ??S_39
+ 0000001A  20C0      MOV         R0,#0xC0
+ 0000001C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000001E  FFF0      BL          stringlcd?T  ; T=0x0001  (2)
+  408:     stringlcd(0xc6,"L:"); //0xc8,9,a  
+ 00000020  4800      LDR         R1,=??S_40 ; ??S_40
+ 00000022  20C6      MOV         R0,#0xC6
+ 00000024  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000026  FFEC      BL          stringlcd?T  ; T=0x0001  (2)
+  409:     stringlcd(0xcb,"H:"); //0xcd,e,f
+ 00000028  4800      LDR         R1,=??S_41 ; ??S_41
+ 0000002A  20CB      MOV         R0,#0xCB
+ 0000002C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000002E  FFE8      BL          stringlcd?T  ; T=0x0001  (2)
+  411: }
+ 00000030  BC08      POP         {R3}
+ 00000032  4718      BX          R3
+ 00000034          ENDP ; 'lcdbasic?T'
+
+
+*** CODE SEGMENT '?PR?main?project':
+  422: void main()        //gsm modem is connected to serial0 and system is connected to serial1
+ 00000000  B500      PUSH        {LR}
+  423: {
+ 00000002            ; SCOPE-START
+  427:  for(p=0;p<14;p++){rfid_t[p]=0;}
+ 00000002  2000      MOV         R0,#0x0
+ 00000004  ---- Variable 'p' assigned to Register 'R0' ----
+ 00000004  E008      B           L_186  ; T=0x00000018
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 42  
+
+ 00000006          L_187:
+ 00000006  2100      MOV         R1,#0x0
+ 00000008  1C02      MOV         R2,R0 ; p
+ 0000000A  0613      LSL         R3,R2,#0x18 ; p
+ 0000000C  0E1B      LSR         R3,R3,#0x18
+ 0000000E  4800      LDR         R2,=rfid_t ; rfid_t
+ 00000010  54D1      STRB        R1,[R2,R3]
+ 00000012  3001      ADD         R0,#0x1
+ 00000014  0600      LSL         R0,R0,#0x18
+ 00000016  0E00      LSR         R0,R0,#0x18
+ 00000018          L_186:
+ 00000018  1C01      MOV         R1,R0 ; p
+ 0000001A  0609      LSL         R1,R1,#0x18 ; p
+ 0000001C  0E09      LSR         R1,R1,#0x18
+ 0000001E  290E      CMP         R1,#0xE
+ 00000020  DBF1      BLT         L_187  ; T=0x00000006
+  428:  pin();
+ 00000022  F7FF      BL          pin?T  ; T=0x0001  (1)
+ 00000024  FFED      BL          pin?T  ; T=0x0001  (2)
+  430:                IOCLR1=m1a;IOCLR1=m1b;
+ 00000026  4800      LDR         R1,=0x1000000
+ 00000028  4800      LDR         R0,=0xE002801C
+ 0000002A  6001      STR         R1,[R0,#0x0]
+ 0000002C  4800      LDR         R1,=0x2000000
+ 0000002E  4800      LDR         R0,=0xE002801C
+ 00000030  6001      STR         R1,[R0,#0x0]
+  431:               IOCLR1=m2a;IOCLR1=m2b;
+ 00000032  4800      LDR         R1,=0x4000000
+ 00000034  4800      LDR         R0,=0xE002801C
+ 00000036  6001      STR         R1,[R0,#0x0]
+ 00000038  4800      LDR         R1,=0x8000000
+ 0000003A  4800      LDR         R0,=0xE002801C
+ 0000003C  6001      STR         R1,[R0,#0x0]
+  433:               IOCLR0=m3a;IOCLR0=m3b;
+ 0000003E  4800      LDR         R1,=0x100000
+ 00000040  4800      LDR         R0,=0xE002800C
+ 00000042  6001      STR         R1,[R0,#0x0]
+ 00000044  4800      LDR         R1,=0x200000
+ 00000046  4800      LDR         R0,=0xE002800C
+ 00000048  6001      STR         R1,[R0,#0x0]
+  434:               IOCLR0=m4a;IOCLR0=m4b;
+ 0000004A  4800      LDR         R1,=0x400000
+ 0000004C  4800      LDR         R0,=0xE002800C
+ 0000004E  6001      STR         R1,[R0,#0x0]
+ 00000050  4800      LDR         R1,=0x800000
+ 00000052  4800      LDR         R0,=0xE002800C
+ 00000054  6001      STR         R1,[R0,#0x0]
+  436:               IOCLR0=relay;
+ 00000056  4800      LDR         R1,=0x400
+ 00000058  4800      LDR         R0,=0xE002800C
+ 0000005A  6001      STR         R1,[R0,#0x0]
+  438:     ser_init_0(0x61,0x00);
+ 0000005C  2061      MOV         R0,#0x61
+ 0000005E  2100      MOV         R1,#0x0
+ 00000060  F7FF      BL          ser_init_0?T  ; T=0x0001  (1)
+ 00000062  FFCE      BL          ser_init_0?T  ; T=0x0001  (2)
+  439:     ser_init_1(0x61,0x00); //serial initilization 
+ 00000064  2061      MOV         R0,#0x61
+ 00000066  2100      MOV         R1,#0x0
+ 00000068  F7FF      BL          ser_init_1?T  ; T=0x0001  (1)
+ 0000006A  FFCA      BL          ser_init_1?T  ; T=0x0001  (2)
+  441:     initlcd();
+ 0000006C  F7FF      BL          initlcd?T  ; T=0x0001  (1)
+ 0000006E  FFC8      BL          initlcd?T  ; T=0x0001  (2)
+  443:     stringlcd(0x80,"Agriculture Robot"); //initial message
+ 00000070  4800      LDR         R1,=??S_47 ; ??S_47
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 43  
+
+ 00000072  2080      MOV         R0,#0x80
+ 00000074  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000076  FFC4      BL          stringlcd?T  ; T=0x0001  (2)
+  446:     delay(1000); delay(1000);delay(1000);
+ 00000078  48FA      LDR         R0,=0x3E8
+ 0000007A  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 0000007C  FFC1      BL          delay?T  ; T=0x0001  (2)
+ 0000007E  48FA      LDR         R0,=0x3E8
+ 00000080  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000082  FFBE      BL          delay?T  ; T=0x0001  (2)
+ 00000084  48FA      LDR         R0,=0x3E8
+ 00000086  F7FF      BL          delay?T  ; T=0x0001  (1)
+ 00000088  FFBB      BL          delay?T  ; T=0x0001  (2)
+  449:                      clcd(1);
+ 0000008A  2001      MOV         R0,#0x1
+ 0000008C  F7FF      BL          clcd?T  ; T=0x0001  (1)
+ 0000008E  FFB8      BL          clcd?T  ; T=0x0001  (2)
+  450:  while(1)
+ 00000090          L_191:
+  452:    if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+ 00000090  2008      MOV         R0,#0x8
+ 00000092  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000094  FFB5      BL          inp0?T  ; T=0x0001  (2)
+ 00000096  2801      CMP         R0,#0x1 ; inp0?T
+ 00000098  D11E      BNE         L_193  ; T=0x000000D8
+ 0000009A  2010      MOV         R0,#0x10
+ 0000009C  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000009E  FFB0      BL          inp0?T  ; T=0x0001  (2)
+ 000000A0  2800      CMP         R0,#0x0 ; inp0?T
+ 000000A2  D119      BNE         L_193  ; T=0x000000D8
+ 000000A4  2020      MOV         R0,#0x20
+ 000000A6  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000A8  FFAB      BL          inp0?T  ; T=0x0001  (2)
+ 000000AA  2800      CMP         R0,#0x0 ; inp0?T
+ 000000AC  D114      BNE         L_193  ; T=0x000000D8
+ 000000AE  2040      MOV         R0,#0x40
+ 000000B0  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000B2  FFA6      BL          inp0?T  ; T=0x0001  (2)
+ 000000B4  2800      CMP         R0,#0x0 ; inp0?T
+ 000000B6  D10F      BNE         L_193  ; T=0x000000D8
+  454:       IOSET1=m1a;IOCLR1=m1b;
+ 000000B8  4800      LDR         R1,=0x1000000
+ 000000BA  4800      LDR         R0,=0xE0028014
+ 000000BC  6001      STR         R1,[R0,#0x0]
+ 000000BE  4800      LDR         R1,=0x2000000
+ 000000C0  4800      LDR         R0,=0xE002801C
+ 000000C2  6001      STR         R1,[R0,#0x0]
+  455:       IOSET1=m2a;IOCLR1=m2b;  stringlcd(0x80,"F");
+ 000000C4  4800      LDR         R1,=0x4000000
+ 000000C6  4800      LDR         R0,=0xE0028014
+ 000000C8  6001      STR         R1,[R0,#0x0]
+ 000000CA  4800      LDR         R1,=0x8000000
+ 000000CC  4800      LDR         R0,=0xE002801C
+ 000000CE  6001      STR         R1,[R0,#0x0]
+ 000000D0  4800      LDR         R1,=??S_48 ; ??S_48
+ 000000D2  2080      MOV         R0,#0x80
+ 000000D4  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000000D6  FF94      BL          stringlcd?T  ; T=0x0001  (2)
+  456:      }
+ 000000D8          L_193:
+  457:    if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+ 000000D8  2008      MOV         R0,#0x8
+ 000000DA  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000DC  FF91      BL          inp0?T  ; T=0x0001  (2)
+ 000000DE  2800      CMP         R0,#0x0 ; inp0?T
+ 000000E0  D11E      BNE         L_194  ; T=0x00000120
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 44  
+
+ 000000E2  2010      MOV         R0,#0x10
+ 000000E4  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000E6  FF8C      BL          inp0?T  ; T=0x0001  (2)
+ 000000E8  2801      CMP         R0,#0x1 ; inp0?T
+ 000000EA  D119      BNE         L_194  ; T=0x00000120
+ 000000EC  2020      MOV         R0,#0x20
+ 000000EE  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000F0  FF87      BL          inp0?T  ; T=0x0001  (2)
+ 000000F2  2800      CMP         R0,#0x0 ; inp0?T
+ 000000F4  D114      BNE         L_194  ; T=0x00000120
+ 000000F6  2040      MOV         R0,#0x40
+ 000000F8  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000000FA  FF82      BL          inp0?T  ; T=0x0001  (2)
+ 000000FC  2800      CMP         R0,#0x0 ; inp0?T
+ 000000FE  D10F      BNE         L_194  ; T=0x00000120
+  459:       IOCLR1=m1a;IOSET1=m1b;
+ 00000100  4800      LDR         R1,=0x1000000
+ 00000102  4800      LDR         R0,=0xE002801C
+ 00000104  6001      STR         R1,[R0,#0x0]
+ 00000106  4800      LDR         R1,=0x2000000
+ 00000108  4800      LDR         R0,=0xE0028014
+ 0000010A  6001      STR         R1,[R0,#0x0]
+  460:       IOCLR1=m2a;IOSET1=m2b;  stringlcd(0x80,"B");
+ 0000010C  4800      LDR         R1,=0x4000000
+ 0000010E  4800      LDR         R0,=0xE002801C
+ 00000110  6001      STR         R1,[R0,#0x0]
+ 00000112  4800      LDR         R1,=0x8000000
+ 00000114  4800      LDR         R0,=0xE0028014
+ 00000116  6001      STR         R1,[R0,#0x0]
+ 00000118  4800      LDR         R1,=??S_49 ; ??S_49
+ 0000011A  2080      MOV         R0,#0x80
+ 0000011C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000011E  FF70      BL          stringlcd?T  ; T=0x0001  (2)
+  461:      } 
+ 00000120          L_194:
+  462:    if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 0) 
+ 00000120  2008      MOV         R0,#0x8
+ 00000122  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000124  FF6D      BL          inp0?T  ; T=0x0001  (2)
+ 00000126  2801      CMP         R0,#0x1 ; inp0?T
+ 00000128  D11E      BNE         L_195  ; T=0x00000168
+ 0000012A  2010      MOV         R0,#0x10
+ 0000012C  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000012E  FF68      BL          inp0?T  ; T=0x0001  (2)
+ 00000130  2801      CMP         R0,#0x1 ; inp0?T
+ 00000132  D119      BNE         L_195  ; T=0x00000168
+ 00000134  2020      MOV         R0,#0x20
+ 00000136  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000138  FF63      BL          inp0?T  ; T=0x0001  (2)
+ 0000013A  2800      CMP         R0,#0x0 ; inp0?T
+ 0000013C  D114      BNE         L_195  ; T=0x00000168
+ 0000013E  2040      MOV         R0,#0x40
+ 00000140  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000142  FF5E      BL          inp0?T  ; T=0x0001  (2)
+ 00000144  2800      CMP         R0,#0x0 ; inp0?T
+ 00000146  D10F      BNE         L_195  ; T=0x00000168
+  464:       IOSET1=m1a;IOCLR1=m1b;
+ 00000148  4800      LDR         R1,=0x1000000
+ 0000014A  4800      LDR         R0,=0xE0028014
+ 0000014C  6001      STR         R1,[R0,#0x0]
+ 0000014E  4800      LDR         R1,=0x2000000
+ 00000150  4800      LDR         R0,=0xE002801C
+ 00000152  6001      STR         R1,[R0,#0x0]
+  465:       IOCLR1=m2a;IOSET1=m2b;  stringlcd(0x80,"L");
+ 00000154  4800      LDR         R1,=0x4000000
+ 00000156  4800      LDR         R0,=0xE002801C
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 45  
+
+ 00000158  6001      STR         R1,[R0,#0x0]
+ 0000015A  4800      LDR         R1,=0x8000000
+ 0000015C  4800      LDR         R0,=0xE0028014
+ 0000015E  6001      STR         R1,[R0,#0x0]
+ 00000160  4800      LDR         R1,=??S_50 ; ??S_50
+ 00000162  2080      MOV         R0,#0x80
+ 00000164  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000166  FF4C      BL          stringlcd?T  ; T=0x0001  (2)
+  466:      } 
+ 00000168          L_195:
+  467:    if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+ 00000168  2008      MOV         R0,#0x8
+ 0000016A  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000016C  FF49      BL          inp0?T  ; T=0x0001  (2)
+ 0000016E  2800      CMP         R0,#0x0 ; inp0?T
+ 00000170  D11E      BNE         L_196  ; T=0x000001B0
+ 00000172  2010      MOV         R0,#0x10
+ 00000174  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000176  FF44      BL          inp0?T  ; T=0x0001  (2)
+ 00000178  2800      CMP         R0,#0x0 ; inp0?T
+ 0000017A  D119      BNE         L_196  ; T=0x000001B0
+ 0000017C  2020      MOV         R0,#0x20
+ 0000017E  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000180  FF3F      BL          inp0?T  ; T=0x0001  (2)
+ 00000182  2801      CMP         R0,#0x1 ; inp0?T
+ 00000184  D114      BNE         L_196  ; T=0x000001B0
+ 00000186  2040      MOV         R0,#0x40
+ 00000188  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000018A  FF3A      BL          inp0?T  ; T=0x0001  (2)
+ 0000018C  2800      CMP         R0,#0x0 ; inp0?T
+ 0000018E  D10F      BNE         L_196  ; T=0x000001B0
+  469:       IOCLR1=m1a;IOSET1=m1b;
+ 00000190  4800      LDR         R1,=0x1000000
+ 00000192  4800      LDR         R0,=0xE002801C
+ 00000194  6001      STR         R1,[R0,#0x0]
+ 00000196  4800      LDR         R1,=0x2000000
+ 00000198  4800      LDR         R0,=0xE0028014
+ 0000019A  6001      STR         R1,[R0,#0x0]
+  470:       IOSET1=m2a;IOCLR1=m2b; stringlcd(0x80,"R");
+ 0000019C  4800      LDR         R1,=0x4000000
+ 0000019E  4800      LDR         R0,=0xE0028014
+ 000001A0  6001      STR         R1,[R0,#0x0]
+ 000001A2  4800      LDR         R1,=0x8000000
+ 000001A4  4800      LDR         R0,=0xE002801C
+ 000001A6  6001      STR         R1,[R0,#0x0]
+ 000001A8  4800      LDR         R1,=??S_51 ; ??S_51
+ 000001AA  2080      MOV         R0,#0x80
+ 000001AC  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000001AE  FF28      BL          stringlcd?T  ; T=0x0001  (2)
+  471:      } 
+ 000001B0          L_196:
+  472:    if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+ 000001B0  2008      MOV         R0,#0x8
+ 000001B2  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000001B4  FF25      BL          inp0?T  ; T=0x0001  (2)
+ 000001B6  2801      CMP         R0,#0x1 ; inp0?T
+ 000001B8  D11E      BNE         L_197  ; T=0x000001F8
+ 000001BA  2010      MOV         R0,#0x10
+ 000001BC  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000001BE  FF20      BL          inp0?T  ; T=0x0001  (2)
+ 000001C0  2800      CMP         R0,#0x0 ; inp0?T
+ 000001C2  D119      BNE         L_197  ; T=0x000001F8
+ 000001C4  2020      MOV         R0,#0x20
+ 000001C6  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000001C8  FF1B      BL          inp0?T  ; T=0x0001  (2)
+ 000001CA  2801      CMP         R0,#0x1 ; inp0?T
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 46  
+
+ 000001CC  D114      BNE         L_197  ; T=0x000001F8
+ 000001CE  2040      MOV         R0,#0x40
+ 000001D0  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000001D2  FF16      BL          inp0?T  ; T=0x0001  (2)
+ 000001D4  2800      CMP         R0,#0x0 ; inp0?T
+ 000001D6  D10F      BNE         L_197  ; T=0x000001F8
+  474:       IOCLR1=m1a;IOCLR1=m1b;
+ 000001D8  4800      LDR         R1,=0x1000000
+ 000001DA  4800      LDR         R0,=0xE002801C
+ 000001DC  6001      STR         R1,[R0,#0x0]
+ 000001DE  4800      LDR         R1,=0x2000000
+ 000001E0  4800      LDR         R0,=0xE002801C
+ 000001E2  6001      STR         R1,[R0,#0x0]
+  475:       IOCLR1=m2a;IOCLR1=m2b; stringlcd(0x80,"S");
+ 000001E4  4800      LDR         R1,=0x4000000
+ 000001E6  4800      LDR         R0,=0xE002801C
+ 000001E8  6001      STR         R1,[R0,#0x0]
+ 000001EA  4800      LDR         R1,=0x8000000
+ 000001EC  4800      LDR         R0,=0xE002801C
+ 000001EE  6001      STR         R1,[R0,#0x0]
+ 000001F0  4800      LDR         R1,=??S_52 ; ??S_52
+ 000001F2  2080      MOV         R0,#0x80
+ 000001F4  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000001F6  FF04      BL          stringlcd?T  ; T=0x0001  (2)
+  476:      }
+ 000001F8          L_197:
+  479:    if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+ 000001F8  2008      MOV         R0,#0x8
+ 000001FA  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000001FC  FF01      BL          inp0?T  ; T=0x0001  (2)
+ 000001FE  2800      CMP         R0,#0x0 ; inp0?T
+ 00000200  D118      BNE         L_198  ; T=0x00000234
+ 00000202  2010      MOV         R0,#0x10
+ 00000204  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000206  FEFC      BL          inp0?T  ; T=0x0001  (2)
+ 00000208  2801      CMP         R0,#0x1 ; inp0?T
+ 0000020A  D113      BNE         L_198  ; T=0x00000234
+ 0000020C  2020      MOV         R0,#0x20
+ 0000020E  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000210  FEF7      BL          inp0?T  ; T=0x0001  (2)
+ 00000212  2801      CMP         R0,#0x1 ; inp0?T
+ 00000214  D10E      BNE         L_198  ; T=0x00000234
+ 00000216  2040      MOV         R0,#0x40
+ 00000218  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000021A  FEF2      BL          inp0?T  ; T=0x0001  (2)
+ 0000021C  2800      CMP         R0,#0x0 ; inp0?T
+ 0000021E  D109      BNE         L_198  ; T=0x00000234
+  481:       IOCLR0=m3a;IOSET0=m3b;  stringlcd(0x80,"1");
+ 00000220  4800      LDR         R1,=0x100000
+ 00000222  4800      LDR         R0,=0xE002800C
+ 00000224  6001      STR         R1,[R0,#0x0]
+ 00000226  4800      LDR         R1,=0x200000
+ 00000228  4800      LDR         R0,=0xE0028004
+ 0000022A  6001      STR         R1,[R0,#0x0]
+ 0000022C  4800      LDR         R1,=??S_53 ; ??S_53
+ 0000022E  2080      MOV         R0,#0x80
+ 00000230  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000232  FEE6      BL          stringlcd?T  ; T=0x0001  (2)
+  482:      }       
+ 00000234          L_198:
+  483:    if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 1 && inp0(dt4) == 0) 
+ 00000234  2008      MOV         R0,#0x8
+ 00000236  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000238  FEE3      BL          inp0?T  ; T=0x0001  (2)
+ 0000023A  2801      CMP         R0,#0x1 ; inp0?T
+ 0000023C  D118      BNE         L_199  ; T=0x00000270
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 47  
+
+ 0000023E  2010      MOV         R0,#0x10
+ 00000240  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000242  FEDE      BL          inp0?T  ; T=0x0001  (2)
+ 00000244  2801      CMP         R0,#0x1 ; inp0?T
+ 00000246  D113      BNE         L_199  ; T=0x00000270
+ 00000248  2020      MOV         R0,#0x20
+ 0000024A  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000024C  FED9      BL          inp0?T  ; T=0x0001  (2)
+ 0000024E  2801      CMP         R0,#0x1 ; inp0?T
+ 00000250  D10E      BNE         L_199  ; T=0x00000270
+ 00000252  2040      MOV         R0,#0x40
+ 00000254  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000256  FED4      BL          inp0?T  ; T=0x0001  (2)
+ 00000258  2800      CMP         R0,#0x0 ; inp0?T
+ 0000025A  D109      BNE         L_199  ; T=0x00000270
+  485:       IOSET0=m3a;IOCLR0=m3b; stringlcd(0x80,"2");
+ 0000025C  4800      LDR         R1,=0x100000
+ 0000025E  4800      LDR         R0,=0xE0028004
+ 00000260  6001      STR         R1,[R0,#0x0]
+ 00000262  4800      LDR         R1,=0x200000
+ 00000264  4800      LDR         R0,=0xE002800C
+ 00000266  6001      STR         R1,[R0,#0x0]
+ 00000268  4800      LDR         R1,=??S_54 ; ??S_54
+ 0000026A  2080      MOV         R0,#0x80
+ 0000026C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000026E  FEC8      BL          stringlcd?T  ; T=0x0001  (2)
+  486:      }
+ 00000270          L_199:
+  487:    if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+ 00000270  2008      MOV         R0,#0x8
+ 00000272  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000274  FEC5      BL          inp0?T  ; T=0x0001  (2)
+ 00000276  2800      CMP         R0,#0x0 ; inp0?T
+ 00000278  D118      BNE         L_200  ; T=0x000002AC
+ 0000027A  2010      MOV         R0,#0x10
+ 0000027C  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000027E  FEC0      BL          inp0?T  ; T=0x0001  (2)
+ 00000280  2800      CMP         R0,#0x0 ; inp0?T
+ 00000282  D113      BNE         L_200  ; T=0x000002AC
+ 00000284  2020      MOV         R0,#0x20
+ 00000286  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000288  FEBB      BL          inp0?T  ; T=0x0001  (2)
+ 0000028A  2800      CMP         R0,#0x0 ; inp0?T
+ 0000028C  D10E      BNE         L_200  ; T=0x000002AC
+ 0000028E  2040      MOV         R0,#0x40
+ 00000290  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000292  FEB6      BL          inp0?T  ; T=0x0001  (2)
+ 00000294  2801      CMP         R0,#0x1 ; inp0?T
+ 00000296  D109      BNE         L_200  ; T=0x000002AC
+  489:       IOCLR0=m3a;IOCLR0=m3b; stringlcd(0x80,"3");
+ 00000298  4800      LDR         R1,=0x100000
+ 0000029A  4800      LDR         R0,=0xE002800C
+ 0000029C  6001      STR         R1,[R0,#0x0]
+ 0000029E  4800      LDR         R1,=0x200000
+ 000002A0  4800      LDR         R0,=0xE002800C
+ 000002A2  6001      STR         R1,[R0,#0x0]
+ 000002A4  4800      LDR         R1,=??S_55 ; ??S_55
+ 000002A6  2080      MOV         R0,#0x80
+ 000002A8  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000002AA  FEAA      BL          stringlcd?T  ; T=0x0001  (2)
+  490:      }                       
+ 000002AC          L_200:
+  494:    if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+ 000002AC  2008      MOV         R0,#0x8
+ 000002AE  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002B0  FEA7      BL          inp0?T  ; T=0x0001  (2)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 48  
+
+ 000002B2  2801      CMP         R0,#0x1 ; inp0?T
+ 000002B4  D118      BNE         L_201  ; T=0x000002E8
+ 000002B6  2010      MOV         R0,#0x10
+ 000002B8  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002BA  FEA2      BL          inp0?T  ; T=0x0001  (2)
+ 000002BC  2800      CMP         R0,#0x0 ; inp0?T
+ 000002BE  D113      BNE         L_201  ; T=0x000002E8
+ 000002C0  2020      MOV         R0,#0x20
+ 000002C2  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002C4  FE9D      BL          inp0?T  ; T=0x0001  (2)
+ 000002C6  2800      CMP         R0,#0x0 ; inp0?T
+ 000002C8  D10E      BNE         L_201  ; T=0x000002E8
+ 000002CA  2040      MOV         R0,#0x40
+ 000002CC  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002CE  FE98      BL          inp0?T  ; T=0x0001  (2)
+ 000002D0  2801      CMP         R0,#0x1 ; inp0?T
+ 000002D2  D109      BNE         L_201  ; T=0x000002E8
+  496:       IOCLR0=m4a;IOSET0=m4b; stringlcd(0x80,"4");
+ 000002D4  4800      LDR         R1,=0x400000
+ 000002D6  4800      LDR         R0,=0xE002800C
+ 000002D8  6001      STR         R1,[R0,#0x0]
+ 000002DA  4800      LDR         R1,=0x800000
+ 000002DC  4800      LDR         R0,=0xE0028004
+ 000002DE  6001      STR         R1,[R0,#0x0]
+ 000002E0  4800      LDR         R1,=??S_56 ; ??S_56
+ 000002E2  2080      MOV         R0,#0x80
+ 000002E4  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000002E6  FE8C      BL          stringlcd?T  ; T=0x0001  (2)
+  497:      }       
+ 000002E8          L_201:
+  498:    if(inp0(dt1) == 0 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+ 000002E8  2008      MOV         R0,#0x8
+ 000002EA  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002EC  FE89      BL          inp0?T  ; T=0x0001  (2)
+ 000002EE  2800      CMP         R0,#0x0 ; inp0?T
+ 000002F0  D118      BNE         L_202  ; T=0x00000324
+ 000002F2  2010      MOV         R0,#0x10
+ 000002F4  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000002F6  FE84      BL          inp0?T  ; T=0x0001  (2)
+ 000002F8  2801      CMP         R0,#0x1 ; inp0?T
+ 000002FA  D113      BNE         L_202  ; T=0x00000324
+ 000002FC  2020      MOV         R0,#0x20
+ 000002FE  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000300  FE7F      BL          inp0?T  ; T=0x0001  (2)
+ 00000302  2800      CMP         R0,#0x0 ; inp0?T
+ 00000304  D10E      BNE         L_202  ; T=0x00000324
+ 00000306  2040      MOV         R0,#0x40
+ 00000308  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000030A  FE7A      BL          inp0?T  ; T=0x0001  (2)
+ 0000030C  2801      CMP         R0,#0x1 ; inp0?T
+ 0000030E  D109      BNE         L_202  ; T=0x00000324
+  500:       IOSET0=m4a;IOCLR0=m4b; stringlcd(0x80,"5");
+ 00000310  4800      LDR         R1,=0x400000
+ 00000312  4800      LDR         R0,=0xE0028004
+ 00000314  6001      STR         R1,[R0,#0x0]
+ 00000316  4800      LDR         R1,=0x800000
+ 00000318  4800      LDR         R0,=0xE002800C
+ 0000031A  6001      STR         R1,[R0,#0x0]
+ 0000031C  4800      LDR         R1,=??S_57 ; ??S_57
+ 0000031E  2080      MOV         R0,#0x80
+ 00000320  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000322  FE6E      BL          stringlcd?T  ; T=0x0001  (2)
+  501:      }
+ 00000324          L_202:
+  502:    if(inp0(dt1) == 1 && inp0(dt2) == 1 && inp0(dt3) == 0 && inp0(dt4) == 1) 
+ 00000324  2008      MOV         R0,#0x8
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 49  
+
+ 00000326  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000328  FE6B      BL          inp0?T  ; T=0x0001  (2)
+ 0000032A  2801      CMP         R0,#0x1 ; inp0?T
+ 0000032C  D118      BNE         L_203  ; T=0x00000360
+ 0000032E  2010      MOV         R0,#0x10
+ 00000330  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000332  FE66      BL          inp0?T  ; T=0x0001  (2)
+ 00000334  2801      CMP         R0,#0x1 ; inp0?T
+ 00000336  D113      BNE         L_203  ; T=0x00000360
+ 00000338  2020      MOV         R0,#0x20
+ 0000033A  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000033C  FE61      BL          inp0?T  ; T=0x0001  (2)
+ 0000033E  2800      CMP         R0,#0x0 ; inp0?T
+ 00000340  D10E      BNE         L_203  ; T=0x00000360
+ 00000342  2040      MOV         R0,#0x40
+ 00000344  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000346  FE5C      BL          inp0?T  ; T=0x0001  (2)
+ 00000348  2801      CMP         R0,#0x1 ; inp0?T
+ 0000034A  D109      BNE         L_203  ; T=0x00000360
+  504:       IOCLR0=m4a;IOCLR0=m4b; stringlcd(0x80,"6");
+ 0000034C  4800      LDR         R1,=0x400000
+ 0000034E  4800      LDR         R0,=0xE002800C
+ 00000350  6001      STR         R1,[R0,#0x0]
+ 00000352  4800      LDR         R1,=0x800000
+ 00000354  4800      LDR         R0,=0xE002800C
+ 00000356  6001      STR         R1,[R0,#0x0]
+ 00000358  4800      LDR         R1,=??S_58 ; ??S_58
+ 0000035A  2080      MOV         R0,#0x80
+ 0000035C  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 0000035E  FE50      BL          stringlcd?T  ; T=0x0001  (2)
+  505:      }                       
+ 00000360          L_203:
+  509:    if(inp0(dt1) == 0 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 1) 
+ 00000360  2008      MOV         R0,#0x8
+ 00000362  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000364  FE4D      BL          inp0?T  ; T=0x0001  (2)
+ 00000366  2800      CMP         R0,#0x0 ; inp0?T
+ 00000368  D115      BNE         L_204  ; T=0x00000396
+ 0000036A  2010      MOV         R0,#0x10
+ 0000036C  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 0000036E  FE48      BL          inp0?T  ; T=0x0001  (2)
+ 00000370  2800      CMP         R0,#0x0 ; inp0?T
+ 00000372  D110      BNE         L_204  ; T=0x00000396
+ 00000374  2020      MOV         R0,#0x20
+ 00000376  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000378  FE43      BL          inp0?T  ; T=0x0001  (2)
+ 0000037A  2801      CMP         R0,#0x1 ; inp0?T
+ 0000037C  D10B      BNE         L_204  ; T=0x00000396
+ 0000037E  2040      MOV         R0,#0x40
+ 00000380  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 00000382  FE3E      BL          inp0?T  ; T=0x0001  (2)
+ 00000384  2801      CMP         R0,#0x1 ; inp0?T
+ 00000386  D106      BNE         L_204  ; T=0x00000396
+  511:       IOSET0=relay;         stringlcd(0x80,"7");
+ 00000388  4800      LDR         R1,=0x400
+ 0000038A  4800      LDR         R0,=0xE0028004
+ 0000038C  6001      STR         R1,[R0,#0x0]
+ 0000038E  4800      LDR         R1,=??S_59 ; ??S_59
+ 00000390  2080      MOV         R0,#0x80
+ 00000392  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 00000394  FE35      BL          stringlcd?T  ; T=0x0001  (2)
+  512:      }
+ 00000396          L_204:
+  513:    if(inp0(dt1) == 1 && inp0(dt2) == 0 && inp0(dt3) == 1 && inp0(dt4) == 1) 
+ 00000396  2008      MOV         R0,#0x8
+ 00000398  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ARM COMPILER V2.32a,  project                                                              04/04/18  20:31:23  PAGE 50  
+
+ 0000039A  FE32      BL          inp0?T  ; T=0x0001  (2)
+ 0000039C  2801      CMP         R0,#0x1 ; inp0?T
+ 0000039E  D000      BNE         $+4
+ 000003A0  E676      B           L_191  ; T=0x00000090
+ 000003A4  2010      MOV         R0,#0x10
+ 000003A6  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000003A8  FE2B      BL          inp0?T  ; T=0x0001  (2)
+ 000003AA  2800      CMP         R0,#0x0 ; inp0?T
+ 000003AC  D000      BNE         $+4
+ 000003AE  E66F      B           L_191  ; T=0x00000090
+ 000003B2  2020      MOV         R0,#0x20
+ 000003B4  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000003B6  FE24      BL          inp0?T  ; T=0x0001  (2)
+ 000003B8  2801      CMP         R0,#0x1 ; inp0?T
+ 000003BA  D000      BNE         $+4
+ 000003BC  E668      B           L_191  ; T=0x00000090
+ 000003C0  2040      MOV         R0,#0x40
+ 000003C2  F7FF      BL          inp0?T  ; T=0x0001  (1)
+ 000003C4  FE1D      BL          inp0?T  ; T=0x0001  (2)
+ 000003C6  2801      CMP         R0,#0x1 ; inp0?T
+ 000003C8  D000      BNE         $+4
+ 000003CA  E661      B           L_191  ; T=0x00000090
+  515:       IOCLR0=relay;        stringlcd(0x80,"8");
+ 000003CE  4800      LDR         R1,=0x400
+ 000003D0  4800      LDR         R0,=0xE002800C
+ 000003D2  6001      STR         R1,[R0,#0x0]
+ 000003D4  4800      LDR         R1,=??S_60 ; ??S_60
+ 000003D6  2080      MOV         R0,#0x80
+ 000003D8  F7FF      BL          stringlcd?T  ; T=0x0001  (1)
+ 000003DA  FE12      BL          stringlcd?T  ; T=0x0001  (2)
+  517:  }//end of while
+ 000003DC  E658      B           L_191  ; T=0x00000090
+ 000003DE            ; SCOPE-END
+  520:  }
+ 000003DE  BC08      POP         {R3}
+ 000003E0  4718      BX          R3
+ 000003E2          ENDP ; 'main'
+
+
+
+Module Information          Static
+----------------------------------
+  code size            =    ------
+  data size            =       180
+  const size           =       448
+End of Module Information.
+
+
+ARM COMPILATION COMPLETE.  1 WARNING(S),  0 ERROR(S)

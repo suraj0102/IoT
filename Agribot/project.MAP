@@ -1,0 +1,178 @@
+LARM LINKER/LOCATER V2.32a                                                              12/28/2014  21:59:06  PAGE 1
+
+
+LARM LINKER/LOCATER V2.32a, INVOKED BY:
+C:\KEIL\ARM\BIN\LA.EXE Startup.obj, project.obj TO project CASE CLASSES (DATA (0X40000000-0X40007FFF), CODE (0X0-0X7FFFF
+>> ), CONST (0X0-0X7FFFF))
+
+
+CPU MODE: LITTLE ENDIAN
+
+
+INPUT MODULES INCLUDED:
+  Startup.obj (STARTUP)
+         COMMENT TYPE 0: AA V2.30a
+  project.obj (project)
+         COMMENT TYPE 0: CARM V2.32a
+  C:\KEIL\ARM\LIB\CAL.LIB (FIQ)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (IRQ)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (DABT)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (PABT)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (SWI)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (UNDEF)
+         COMMENT TYPE 0: AA V2.30a
+  C:\KEIL\ARM\LIB\CAL.LIB (strcmp)
+         COMMENT TYPE 0: CARM V2.32a
+
+
+ACTIVE MEMORY CLASSES OF MODULE:  project (STARTUP)
+
+BASE       START      END        USED       MEMORY CLASS
+========================================================
+00000000H  40000000H  40007FFFH  00000538H  DATA
+00000000H  00000000H  0007FFFFH  00000B4CH  CODE
+00000000H  00000000H  0007FFFFH  000000E2H  CONST
+
+
+INTERRUPT FUNCTIONS
+
+TYPE  STACK SIZE    FUNCTION NAME
+=================================
+irq                 serial0_RxISR?A
+
+
+
+
+MEMORY MAP OF MODULE:  project (STARTUP)
+
+START      STOP       LENGTH    ALIGN  RELOC  MEMORY CLASS   SEGMENT NAME
+=========================================================================
+00000000H  0000010FH  00000110H     4  AT..   CODE           STARTUPCODE
+00000110H  00000161H  00000052H     4  UNIT   CONST          ?CON?project
+00000162H  00000163H  00000002H   ---  ---    **GAP**
+00000164H  00000173H  00000010H     4  UNIT   CONST          ?C_CLRSEG
+00000174H  000001F3H  00000080H     4  UNIT   CONST          ?C_INITSEG
+000001F4H  00000217H  00000024H     4  UNIT   CODE           ?PR?delay?T?project
+00000218H  000002C7H  000000B0H     4  UNIT   CODE           ?PR?clcd?T?project
+000002C8H  00000377H  000000B0H     4  UNIT   CODE           ?PR?dlcd?T?project
+00000378H  000004E3H  0000016CH     4  UNIT   CODE           ?PR?initlcd?T?project
+000004E4H  00000557H  00000074H     4  UNIT   CODE           ?PR?stringlcd?T?project
+00000558H  00000593H  0000003CH     4  UNIT   CODE           ?PR?ser_init_1?T?project
+00000594H  000005B3H  00000020H     4  UNIT   CODE           ?PR?send_1?T?project
+000005B4H  000005D3H  00000020H     4  UNIT   CODE           ?PR?receive_1?T?project
+000005D4H  000005F3H  00000020H     4  UNIT   CODE           ?PR?string_1?T?project
+000005F4H  0000062FH  0000003CH     4  UNIT   CODE           ?PR?ser_init_0?T?project
+LARM LINKER/LOCATER V2.32a                                                            12/28/2014  21:59:06  PAGE 2
+
+
+00000630H  0000064FH  00000020H     4  UNIT   CODE           ?PR?send_0?T?project
+00000650H  0000067BH  0000002CH     4  UNIT   CODE           ?PR?receive_0?T?project
+0000067CH  0000069BH  00000020H     4  UNIT   CODE           ?PR?string_0?T?project
+0000069CH  000006DFH  00000044H     4  UNIT   CODE           ?PR?gsminit?T?project
+000006E0H  000009DBH  000002FCH     4  UNIT   CODE           ?PR?keypad?T?project
+000009DCH  00000ABBH  000000E0H     4  UNIT   CODE           ?PR?serial0_RxISR?A?project
+00000ABCH  00000B1FH  00000064H     4  UNIT   CODE           ?PR?pin?T?project
+00000B20H  00000BE3H  000000C4H     4  UNIT   CODE           ?PR?main?project
+00000BE4H  00000BE7H  00000004H     4  UNIT   CODE           ?C?FIQ
+00000BE8H  00000BEBH  00000004H     4  UNIT   CODE           ?C?IRQ
+00000BECH  00000BEFH  00000004H     4  UNIT   CODE           ?C?DABT
+00000BF0H  00000BF3H  00000004H     4  UNIT   CODE           ?C?PABT
+00000BF4H  00000BFBH  00000008H     4  UNIT   CODE           ?C?UNDEF
+00000BFCH  00000C2FH  00000034H     4  UNIT   CODE           ?PR?strcmp?T?strcmp
+00000C30H  3FFFFFFFH  3FFFF3D0H   ---  ---    **GAP**
+40000000H  4000048FH  00000490H     4  UNIT   DATA           STACK
+40000490H  40000537H  000000A8H     4  UNIT   DATA           ?DT0?project
+
+
+
+REMOVED FUNCTIONS OF MODULE:  project (STARTUP)
+
+      ATTRIBUTE  FUNCTION NAME
+      ========================
+       unused    conv?T
+       unused    conv_serial_0?T
+       unused    conv_serial_1?T
+       unused    sendmsg?T
+       unused    as1?T
+       unused    as2?T
+       unused    inp0?T
+       unused    InitSerial0Int?T
+       unused    gps?T
+
+
+
+PUBLIC SYMBOLS OF MODULE:  project (STARTUP)
+
+      VALUE      CLASS    TYPE      PUBLIC SYMBOL NAME
+      ================================================
+      00000164H  ---      ---       ?C?CLRTAB
+      00000B20H  ---      ---       ?C?INIT
+      00000174H  ---      ---       ?C?INITTAB
+      00000BECH  CODE     ---       DAbt_Handler?A
+      00000BE4H  CODE     ---       FIQ_Handler?A
+      00000BE8H  CODE     ---       IRQ_Handler?A
+      00000000H  CODE     ---       InitSerial0Int?T
+      00000BF0H  CODE     ---       PAbt_Handler?A
+      00000BF4H  CODE     ---       SWI_Handler?A
+      00000BF8H  CODE     ---       Undef_Handler?A
+      00000000H  CODE     ---       __startup
+      00000000H  CODE     ---       as1?T
+      00000000H  CODE     ---       as2?T
+      40000490H  DATA     ---       card
+      00000218H  CODE     ---       clcd?T
+      400004A4H  DATA     ---       cnt
+      00000000H  CODE     ---       conv?T
+      00000000H  CODE     ---       conv_serial_0?T
+      00000000H  CODE     ---       conv_serial_1?T
+      400004BCH  DATA     BYTE      count
+      000001F4H  CODE     ---       delay?T
+      000002C8H  CODE     ---       dlcd?T
+      000000F0H  CODE     ---       exit?A
+      000000F4H  CODE     ---       exit?T
+      00000000H  CODE     ---       gps?T
+LARM LINKER/LOCATER V2.32a                                                            12/28/2014  21:59:06  PAGE 3
+
+
+      400004BDH  DATA     ---       gps_location
+      0000069CH  CODE     ---       gsminit?T
+      400004A0H  DATA     ---       hb
+      400004A8H  DATA     ---       ht
+      00000378H  CODE     ---       initlcd?T
+      00000000H  CODE     ---       inp0?T
+      400004B0H  DATA     ---       key
+      000006E0H  CODE     ---       keypad?T
+      400004ACH  DATA     ---       loop
+      00000B54H  CODE     ---       main
+      400004D7H  DATA     ---       mob1
+      400004E6H  DATA     ---       mob2
+      00000ABCH  CODE     ---       pin?T
+      00000650H  CODE     ---       receive_0?A
+      0000065CH  CODE     ---       receive_0?T
+      000005B4H  CODE     ---       receive_1?T
+      40000504H  DATA     ---       rfid_0
+      40000511H  DATA     ---       rfid_1
+      4000051EH  DATA     ---       rfid_2
+      4000052BH  DATA     ---       rfid_3
+      400004F5H  DATA     ---       rfid_t
+      00000630H  CODE     ---       send_0?T
+      00000594H  CODE     ---       send_1?T
+      00000000H  CODE     ---       sendmsg?T
+      000005F4H  CODE     ---       ser_init_0?T
+      00000558H  CODE     ---       ser_init_1?T
+      000009DCH  CODE     ---       serial0_RxISR?A
+      40000494H  DATA     ---       set1
+      40000498H  DATA     ---       set2
+      4000049CH  DATA     ---       set3
+      00000BFCH  CODE     ---       strcmp?A
+      00000C08H  CODE     ---       strcmp?T
+      0000067CH  CODE     ---       string_0?T
+      000005D4H  CODE     ---       string_1?T
+      000004E4H  CODE     ---       stringlcd?T
+
+Program Size: data=1336 const=226 code=2892
+LARM RUN COMPLETE.  0 WARNING(S),  0 ERROR(S)
